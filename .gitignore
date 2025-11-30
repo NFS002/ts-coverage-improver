@@ -1,0 +1,11 @@
+node_modules
+dist
+.turbo
+.workspace
+coverage
+data
+frontend/node_modules
+backend/node_modules
+backend/dist
+backend/.env
+*.sqlite
