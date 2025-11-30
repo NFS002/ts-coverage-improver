@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ApiController } from './infrastructure/http/api.controller';
-import { createDbClient, DbClient } from './infrastructure/config/database';
+import { createDbClient, DbClient, ForkModeConfig, GithubConfig } from './infrastructure/config';
 import { JobDrizzleRepository } from './infrastructure/repositories/job.drizzle.repository';
 import { FileSystemRepoPreparer } from './infrastructure/github/fs-repo.preparer';
 import { LocalTsCoverageScanner } from './infrastructure/coverage/istanbul-scanner';
@@ -25,18 +25,27 @@ import { GetRepositoryUseCase } from './application/use-cases/get-repository.use
       useFactory: () => createDbClient(),
     },
     {
+      provide: 'GH_CONFIG',
+      useFactory: () => new GithubConfig(),
+    },
+    {
+      provide: 'FORK_CONFIG',
+      useFactory: () => new ForkModeConfig(),
+    },
+    {
       provide: JobDrizzleRepository,
       useFactory: (db: DbClient) => new JobDrizzleRepository(db),
       inject: ['DB_CLIENT'],
     },
     {
       provide: RepositoryDrizzleRepository,
-      useFactory: (db: DbClient) => new RepositoryDrizzleRepository(db),
-      inject: ['DB_CLIENT'],
+      useFactory: (db: DbClient, forkMode: ForkModeConfig) => new RepositoryDrizzleRepository(db, forkMode),
+      inject: ['DB_CLIENT', 'FORK_CONFIG'],
     },
     {
       provide: FileSystemRepoPreparer,
-      useFactory: () => new FileSystemRepoPreparer(undefined),
+      useFactory: (forkMode: ForkModeConfig, ghConfig: GithubConfig) => new FileSystemRepoPreparer(forkMode, ghConfig),
+      inject: ['FORK_CONFIG', 'GH_CONFIG'],
     },
     {
       provide: 'COVERAGE_SCANNER',
@@ -94,9 +103,9 @@ import { GetRepositoryUseCase } from './application/use-cases/get-repository.use
     },
     {
       provide: EnsureRepositoryUseCase,
-      useFactory: (repoRepo: RepositoryDrizzleRepository) =>
-        new EnsureRepositoryUseCase(repoRepo),
-      inject: [RepositoryDrizzleRepository],
+      useFactory: (repoRepo: RepositoryDrizzleRepository, forkConfig: ForkModeConfig, ghConfig: GithubConfig) =>
+        new EnsureRepositoryUseCase(repoRepo, forkConfig, ghConfig),
+      inject: [RepositoryDrizzleRepository, 'FORK_CONFIG', 'GH_CONFIG'],
     },
     {
       provide: ListRepositoriesUseCase,

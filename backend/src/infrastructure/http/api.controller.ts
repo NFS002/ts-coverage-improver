@@ -9,7 +9,10 @@ import { EnsureRepositoryUseCase } from '../../application/use-cases/ensure-repo
 import { ListRepositoriesUseCase } from '../../application/use-cases/list-repositories.usecase';
 import { RepositorySummaryDto } from '../../application/dto/repository-summary.dto';
 import { GetRepositoryUseCase } from '../../application/use-cases/get-repository.usecase';
-import { destructureGithubSshUrl, GITHUB_HTTPS_URL_REGEX, httpsToSshUrl } from '@utils';
+import { destructureGithubHttpsUrl, destructureGithubSshUrl, GITHUB_HTTPS_URL_REGEX, httpsToSshUrl } from '@utils';
+import { CoverageFile } from 'domain/entities/coverage-file.entity';
+import path from 'path/win32';
+import { ImprovementJob } from 'domain/entities/improvement-job.entity';
 
 @Controller()
 export class ApiController {
@@ -28,46 +31,46 @@ export class ApiController {
     return { ok: true };
   }
 
-  /* Analyse coverage endpoints */
+  /* Analyse coverage for a new remote repository */
   @Post('/coverage/analyse')
   async analyseCoverageForUrl(@Body() body: { repoUrl?: string }) {
     const { repoUrl: httpsUrl } = parseWithZod(repoUrlSchema, body);
+    const destructured = destructureGithubHttpsUrl(httpsUrl)
     // Check if a repository record exists for the same url
-    const sshUrl = httpsToSshUrl(httpsUrl);
-    const repoDao = await this.getRepository.findByUrls({ httpsUrl, sshUrl });
+    const repoDao = await this.getRepository.findByOwnerAndName(destructured);
     if (repoDao) {
       throw new BadRequestException('Repository already exists');
     }
-    const { owner, repo } = destructureGithubSshUrl(sshUrl);
-    const remoteRepository = await this.ensureRepository.getRemoteRepository({ owner, repo });
+    const remoteRepository = await this.ensureRepository.getRemoteRepository(destructured);
     if (!remoteRepository) {
       throw new BadRequestException('Repository does not exist or is inaccessible');
     }
-    const repository = await this.ensureRepository.createRepository({ httpsUrl, sshUrl });
     try {
-      const files = await this.analyseCoverage.execute({
-        owner,
-        repo,
+      const {
+        repository: repositoryDao,
+        files: coverageFiles,
+      } = await this.analyseCoverage.prepareAndScan(destructured);
+      const normalisedFiles = coverageFiles.map(file => {
+        const normalisedPath = file.filePath.replace(repositoryDao.path + '/', '');
+        return new CoverageFile(normalisedPath, file.coveragePct);
       });
-      return { repository, files };
+      const repository = await this.ensureRepository.createRepository(repositoryDao);
+      return { repository, files: normalisedFiles };
     } catch (err) {
       console.error("Error analysing coverage: ", err);
       throw new BadRequestException('Unable to analyse coverage');
     }
   }
 
+  /* Rescan a previously analysed repository and return coverage files */
   @Get('/repositories/:id/coverage')
   async coverageForRepository(@Param('id') id: string) {
-    const repository = await this.getRepository.execute(id);
+    const repository = await this.getRepository.findById(id);
     if (!repository) {
       throw new BadRequestException('Repository not found');
     }
     try {
-      const { owner, repo } = destructureGithubSshUrl(repository.sshUrl);
-      const files = await this.analyseCoverage.execute({
-        owner,
-        repo,
-      });
+      const files = await this.analyseCoverage.scan('path not stored yet');
       return { repository, files };
     } catch (err: any) {
       throw new BadRequestException(err?.message ?? 'Unable to analyse coverage');
@@ -77,18 +80,19 @@ export class ApiController {
   @Get('/jobs')
   async jobs(@Query('repoId') repoId?: string) {
     const jobs = await this.listJobs.execute(repoId);
-    const repositoryMap = repoId
-      ? new Map<string, RepositorySummaryDto | undefined>([
-        [repoId, (await this.getRepository.execute(repoId)) ?? undefined],
-      ])
-      : new Map<string, RepositorySummaryDto | undefined>(
-        (await this.listRepositories.execute()).map((r) => [r.id, r]),
-      );
+    // const repositoryMap = repoId
+    //   ? new Map<string, RepositorySummaryDto | undefined>([
+    //     [repoId, (await this.getRepository.execute(repoId)) ?? undefined],
+    //   ])
+    //   : new Map<string, RepositorySummaryDto | undefined>(
+    //     (await this.listRepositories.execute()).map((r) => [r.id, r]),
+    //   );
 
-    return jobs.map((job) => {
-      const repo = repositoryMap.get(job.repoId);
-      return mapJob(job, repo);
-    });
+    // return jobs.map((job) => {
+    //   const repo = repositoryMap.get(job.repoId);
+    //   return mapJob(job);
+    // });
+    return jobs.map(mapJob);
   }
 
   @Get('/jobs/:id')
@@ -97,20 +101,20 @@ export class ApiController {
     if (!job) {
       throw new BadRequestException('Job not found');
     }
-    const repo = await this.getRepository.execute(job.repoId);
-    return mapJob(job, repo);
+    //const repo = await this.getRepository.execute(job.repoId);
+    return mapJob(job);
   }
 
   @Post('/jobs')
   async createJob(@Body() body: CreateJobRequest) {
-    const parsed = parseWithZod(createJobSchema, body);
-    const repository = await this.resolveRepository(parsed);
+    const { repoId, filePath } = parseWithZod(createJobSchema, body);
+    const repository = await this.getRepository.findById(repoId);
+    if (!repository) {
+      throw new BadRequestException('Repository not found');
+    }
     try {
-      const job = await this.startImprovement.execute({
-        repoId: repository.id,
-        filePath: parsed.filePath,
-      });
-      return mapJob(job, repository);
+      const job = await this.startImprovement.execute(repository);
+      return mapJob(job);
     } catch (err: any) {
       throw new BadRequestException(err?.message ?? 'Unable to create job');
     }
@@ -130,42 +134,11 @@ export class ApiController {
     }
     return mapRepository(repo);
   }
-
-  private async resolveRepository(input: { repoId?: string; repoUrl?: string }): Promise<RepositorySummaryDto> {
-    const { repoId, repoUrl } = input;
-    if (repoId) {
-      const repo = await this.getRepository.execute(repoId);
-      if (!repo) {
-        throw new BadRequestException('Repository not found');
-      }
-      return repo;
-    }
-    const sshUrl = httpsToSshUrl(repoUrl!);
-    const ensured = await this.ensureRepository.execute({
-      httpsUrl: repoUrl!,
-      sshUrl,
-    });
-    const repoWithStats =
-      (await this.getRepository.execute(ensured.id)) ??
-      {
-        id: ensured.id,
-        httpsUrl: ensured.httpsUrl,
-        sshUrl: ensured.sshUrl,
-        createdAt: ensured.createdAt,
-        updatedAt: ensured.updatedAt,
-        openJobs: 0,
-        queuedJobs: 0,
-        totalJobs: 0,
-      };
-    return repoWithStats;
-  }
 }
 
-const mapJob = (job: any, repo?: RepositorySummaryDto | null | undefined) => ({
+const mapJob = (job: ImprovementJob) => ({
   id: job.id,
-  repoId: repo?.id ?? job.repoId,
-  repoUrl: repo?.httpsUrl ?? null,
-  repoSshUrl: repo?.sshUrl ?? null,
+  repoId: job.repoId,
   filePath: job.filePath,
   status: job.status,
   prUrl: job.prUrl,
@@ -176,8 +149,6 @@ const mapJob = (job: any, repo?: RepositorySummaryDto | null | undefined) => ({
 
 const mapRepository = (repo: RepositorySummaryDto) => ({
   id: repo.id,
-  httpsUrl: repo.httpsUrl,
-  sshUrl: repo.sshUrl,
   createdAt: repo.createdAt,
   updatedAt: repo.updatedAt,
   openJobs: repo.openJobs,
@@ -201,11 +172,11 @@ const repoIdentifierSchema = z
     'Either repoId or repoUrl is required',
   );
 
-const createJobSchema = repoIdentifierSchema.safeExtend({
-  filePath: z
-    .string({ error: 'filePath is required' })
-    .trim()
-    .min(1, 'filePath is required'),
+const createJobSchema = z.object({
+  repoId: z.uuid({
+    message: 'repoId is required and must be a valid UUID',
+  }),
+  filePath: z.string().min(1, { message: 'filePath is required' }),
 });
 
 const parseWithZod = <T>(schema: z.ZodSchema<T>, payload: unknown): T => {

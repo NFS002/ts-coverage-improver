@@ -3,6 +3,7 @@ import { JobRepository } from '../../domain/repositories/job.repository';
 import { CreateJobDto } from '../dto/create-job.dto';
 import { ImprovementJob } from '../../domain/entities/improvement-job.entity';
 import { JobQueue } from '../ports/job-queue';
+import { Repository } from 'domain/entities/repository.entity';
 
 export class StartImprovementUseCase {
   constructor(
@@ -10,20 +11,11 @@ export class StartImprovementUseCase {
     private readonly jobQueue: JobQueue,
   ) {}
 
-  async execute(input: CreateJobDto): Promise<ImprovementJob> {
+  async execute(repo: Repository): Promise<ImprovementJob> {
     const now = new Date();
-    const job = new ImprovementJob(
-      uuid(),
-      input.repoId,
-      input.filePath,
-      'queued',
-      null,
-      [`[${now.toISOString()}] Job created for ${input.filePath}`],
-      now,
-      now,
-    );
-    await this.jobRepository.save(job);
+    const job = ImprovementJob.fromRepositoryDao(repo);
     await this.jobQueue.enqueue(job.id);
+    await this.jobRepository.save(job);
     return job;
   }
 }

@@ -33,12 +33,15 @@ export function createDbClient(): DbClient {
     );
     CREATE TABLE IF NOT EXISTS repositories (
       id TEXT PRIMARY KEY,
-      httpsUrl TEXT NOT NULL,
-      sshUrl TEXT NOT NULL,
+      owner TEXT NOT NULL,
+      repo TEXT NOT NULL,
+      forkMode INTEGER NOT NULL,
+      forkOwner TEXT,
+      forkOrg TEXT,
+      path TEXT NOT NULL UNIQUE,
       createdAt INTEGER NOT NULL,
       updatedAt INTEGER NOT NULL,
-      UNIQUE(httpsUrl),
-      UNIQUE(sshUrl)
+      UNIQUE(owner, repo, forkMode, forkOwner, forkOrg),
     );
   `);
 

@@ -1,16 +1,69 @@
+import { SelectJobRow } from 'infrastructure/persistence/entities';
 import { JobStatus } from '../value-objects/job-status';
+import { Repository } from './repository.entity';
+import { v4 as uuid } from 'uuid';
 
 export class ImprovementJob {
+
+  id: string;
+  repoId: string;
+  filePath: string;
+  status: JobStatus;
+  prUrl: string | null;
+  log: string[];
+  createdAt: Date;
+  updatedAt: Date;
+
   constructor(
-    public readonly id: string,
-    public readonly repoId: string,
-    public readonly filePath: string,
-    public status: JobStatus,
-    public prUrl: string | null,
-    public log: string[],
-    public readonly createdAt: Date,
-    public updatedAt: Date,
-  ) {}
+    params: {
+      id: string,
+      repoId: string,
+      filePath: string,
+      status: JobStatus,
+      prUrl: string | null,
+      log: string[],
+      createdAt: Date,
+      updatedAt: Date,
+    }
+  ) {
+    const { id, repoId, filePath, status, prUrl, log, createdAt, updatedAt } = params;
+    this.id = id;
+    this.repoId = repoId;
+    this.filePath = filePath;
+    this.status = status;
+    this.prUrl = prUrl;
+    this.log = log;
+    this.createdAt = createdAt;
+    this.updatedAt = updatedAt;
+  }
+
+  static fromRepositoryDao(repositoryDao: Repository): ImprovementJob {
+    const { id: repoId, owner, path, repo, updatedAt, createdAt } = repositoryDao;
+    return new ImprovementJob({
+      id: uuid(),
+      repoId,
+      filePath: path,
+      status: 'queued',
+      prUrl: null,
+      log: [`[${new Date().toISOString()}] Job created for ${owner}/${repo}`],
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+  }
+
+    static fromRow(row: SelectJobRow): ImprovementJob {
+    const { id, repoId, prUrl, filePath, status, log, updatedAt, createdAt} = row;
+    return new ImprovementJob({
+      id,
+      repoId,
+      filePath,
+      status: status as JobStatus,
+      prUrl,
+      log,
+      createdAt,
+      updatedAt,
+    });
+  }
 
   markRunning(note?: string) {
     this.status = 'running';
@@ -26,6 +79,10 @@ export class ImprovementJob {
   markFailed(note?: string) {
     this.status = 'failed';
     this.touch(note);
+  }
+
+  appendLog(message: string) {
+    this.log.push(`[${new Date().toISOString()}] ${message}`)
   }
 
   private touch(note?: string) {

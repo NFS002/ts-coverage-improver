@@ -2,32 +2,25 @@ import { and, eq, or } from 'drizzle-orm';
 import { v4 as uuid } from 'uuid';
 import { RepositoryRepository } from '../../domain/repositories/repository.repository';
 import { Repository } from '../../domain/entities/repository.entity';
-import { DbClient } from '../config/database';
+import  { DbClient, ForkModeConfig } from '../config';
 import {
+  InsertRepositoryRow,
   repositoriesTable,
   SelectRepositoryRow,
 } from '../persistence/entities/repositories';
 
-const toDao = (row: SelectRepositoryRow): Repository =>
-  new Repository(row.id, row.httpsUrl, row.sshUrl, row.createdAt, row.updatedAt);
+const toDao = (row: SelectRepositoryRow): Repository => Repository.fromRow(row);
 
-const toRow = (repo: Repository): SelectRepositoryRow => ({
-  id: repo.id,
-  httpsUrl: repo.httpsUrl,
-  sshUrl: repo.sshUrl,
-  createdAt: repo.createdAt,
-  updatedAt: repo.updatedAt,
-});
+const toRow = (repo: Repository): InsertRepositoryRow => repo.toRow();
 
 export class RepositoryDrizzleRepository implements RepositoryRepository {
-  constructor(private readonly db: DbClient) {}
+  constructor(private readonly db: DbClient, private readonly forkModeConfig: ForkModeConfig) {}
 
   async save(repository: Repository): Promise<void> {
     const row = toRow(repository);
     await this.db
       .insert(repositoriesTable)
       .values(row)
-      .onConflictDoUpdate({ target: repositoriesTable.id, set: row })
       .run();
   }
 
@@ -36,35 +29,15 @@ export class RepositoryDrizzleRepository implements RepositoryRepository {
     return row ? toDao(row) : null;
   }
 
-  async findByHttpsUrl(httpsUrl: string): Promise<Repository | null> {
-    const row = this.db
-      .select()
-      .from(repositoriesTable)
-      .where(eq(repositoriesTable.httpsUrl, httpsUrl))
-      .get();
-    return row ? toDao(row) : null;
-  }
-
-  async findBySshUrl(sshUrl: string): Promise<Repository | null> {
-    const row = this.db.select().from(repositoriesTable).where(eq(repositoriesTable.sshUrl, sshUrl)).get();
-    return row ? toDao(row) : null;
-  }
-
-  /* Looks up a repoistoru by both https and ssh urls */
-  async findByUrls({
-    httpsUrl,
-    sshUrl,
-  }: {
-    httpsUrl: string;
-    sshUrl: string;
-  }): Promise<Repository | null> {
+  async findByOwnerAndName(params: { owner: string; repo: string}): Promise<Repository | null> {
+    const { owner, repo } = params;
     const row = this.db
       .select()
       .from(repositoriesTable)
       .where(
         and(
-        eq(repositoriesTable.httpsUrl, httpsUrl),
-        eq(repositoriesTable.sshUrl, sshUrl),
+          eq(repositoriesTable.owner, owner),
+          eq(repositoriesTable.repo, repo),
         ),
       ).get();
 
@@ -76,18 +49,30 @@ export class RepositoryDrizzleRepository implements RepositoryRepository {
     return rows.map(toDao);
   }
 
-  async ensureExists(httpsUrl: string, sshUrl: string): Promise<Repository> {
-    const existing =
-      (await this.findByHttpsUrl(httpsUrl)) ||
-      (await this.findBySshUrl(sshUrl));
-    if (existing) {
-      existing.touch();
-      await this.save(existing);
-      return existing;
-    }
-    const now = new Date();
-    const repo = new Repository(uuid(), httpsUrl, sshUrl, now, now);
-    await this.save(repo);
-    return repo;
-  }
+  // async getOrCreate(params: {
+  //   repo: string;
+  //   owner: string;
+  // }): Promise<Repository> {
+  //   const existing = await this.findByOwnerAndName(params);
+  //   if (existing) {
+  //     existing.touch();
+  //     await this.save(existing);
+  //     return existing;
+  //   }
+  //   const { repo, owner } = params;
+  //   const { enabled: forkEnabled, owner: forkOwner, org: forkOrg } = this.forkModeConfig;
+  //   const now = new Date();
+  //   const repositoryDao = new Repository({
+  //     id: uuid(),
+  //     repo,
+  //     owner,
+  //     forkMode: forkEnabled,
+  //     forkOwner: forkOwner,
+  //     forkOrg: forkOrg,
+  //     createdAt: now,
+  //     updatedAt: now,
+  //   });
+  //   await this.save(repositoryDao);
+  //   return repositoryDao;
+  // }
 }

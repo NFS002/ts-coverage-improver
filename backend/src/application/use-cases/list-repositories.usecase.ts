@@ -18,8 +18,6 @@ export class ListRepositoriesUseCase {
       const repoStats = statsByRepo.get(repo.id);
       return {
         id: repo.id,
-        httpsUrl: repo.httpsUrl,
-        sshUrl: repo.sshUrl,
         createdAt: repo.createdAt,
         updatedAt: repo.updatedAt,
         openJobs: repoStats?.open ?? 0,

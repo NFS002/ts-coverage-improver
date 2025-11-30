@@ -5,17 +5,7 @@ import { JobStatus } from '../../domain/value-objects/job-status';
 import { DbClient } from '../config/database';
 import { jobsTable, SelectJobRow } from '../persistence/entities/jobs';
 
-const toDomain = (row: SelectJobRow): ImprovementJob =>
-  new ImprovementJob(
-    row.id,
-    row.repoId,
-    row.filePath,
-    row.status as JobStatus,
-    row.prUrl ?? null,
-    row.log ?? [],
-    row.createdAt,
-    row.updatedAt,
-  );
+const toDomain = (row: SelectJobRow): ImprovementJob => ImprovementJob.fromRow(row);
 
 const toRow = (job: ImprovementJob): SelectJobRow => ({
   id: job.id,

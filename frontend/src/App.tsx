@@ -50,7 +50,7 @@ const createJobSchema = repoSelectorSchema.safeExtend({
 });
 
 function App() {
-  const [repoUrl, setRepoUrl] = useState('https://github.com/octocat/Hello-World.git');
+  const [repoUrl, setRepoUrl] = useState('https://github.com/bitjson/typescript-starter.git');
   const [repositories, setRepositories] = useState<RepositorySummary[]>([]);
   const [selectedRepoId, setSelectedRepoId] = useState<string | null>(null);
   const [coverageByRepo, setCoverageByRepo] = useState<Record<string, CoverageFile[]>>({});
@@ -144,7 +144,7 @@ function App() {
       } else {
         const validation = repoSchema.safeParse({ repoUrl: targetRepoUrl });
         if (!validation.success) {
-          setError(validation.error.issues.map((i) => i.message).join('; '));
+          setError(validation.error.issues.map((i) => i.message)[0]);
           return;
         }
         const normalizedUrl = validation.data.repoUrl;
@@ -174,6 +174,7 @@ function App() {
     }
   }, [repoUrl, selectedRepoId, upsertRepository]);
 
+  
   const analyse = useCallback(async () => {
     setError(null);
     setLoadingCoverage(true);
@@ -181,7 +182,7 @@ function App() {
       let res: Response;
       const validation = repoSchema.safeParse({ repoUrl });
       if (!validation.success) {
-        setError(validation.error.message);
+        setError(validation.error.issues.map((i) => i.message)[0]);
         return;
       }
       const normalizedUrl = validation.data.repoUrl;

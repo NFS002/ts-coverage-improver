@@ -1,6 +1,7 @@
 import { CoverageScanner } from '../../domain/services/coverage-scanner';
 import { CoverageFile } from '../../domain/entities/coverage-file.entity';
 import { RepoPreparer } from '../ports/repo-preparer';
+import { Repository } from 'domain/entities/repository.entity';
 
 export class AnalyseCoverageUseCase {
   constructor(
@@ -8,17 +9,21 @@ export class AnalyseCoverageUseCase {
     private readonly coverageScanner: CoverageScanner,
   ) { }
 
-  async execute(params: {
+  async scan(repoPath: string): Promise<CoverageFile[]> {
+    return await this.coverageScanner.scan(repoPath);
+  }
+
+  async prepareAndScan(params: {
     owner: string;
     repo: string;
-  }): Promise<CoverageFile[]> {
-    const clonedRepoPath = await this.repoPreparer.prepare(params);
-    const coverageFiles = await this.coverageScanner.scan(clonedRepoPath);
-    return coverageFiles.map(file =>
-    {
-      const normalisedPath = file.filePath.replace(clonedRepoPath + '/', '');
-      return new CoverageFile(normalisedPath, file.coveragePct);
-    });
+  }): Promise<{
+    repository: Repository;
+    files: CoverageFile[];
+  }> {
+    const repository = await this.repoPreparer.prepare(params);
+    const files = await this.scan(repository.path);
+    return { repository, files };
   }
+
 
 }

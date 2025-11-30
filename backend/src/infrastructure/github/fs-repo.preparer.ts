@@ -3,45 +3,42 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { execSync } from 'child_process';
 import crypto from 'crypto';
-import { destructureGithubSshUrl, toSshUrl } from '@utils'
-import { Octokit } from '@octokit/rest';
+import { toSshUrl } from '@utils'
+import { ForkModeConfig, GithubConfig } from 'infrastructure/config';
+import { Repository } from 'domain/entities/repository.entity';
 
 export class FileSystemRepoPreparer implements RepoPreparer {
+  private readonly forkConfig: ForkModeConfig;
+  private readonly ghConfig: GithubConfig;
   private readonly baseDir: string;
-  private readonly forkMode: boolean;
-  private readonly forkOwner?: string;
-  private readonly gitClient: Octokit
-  private readonly forkOrg?: string
 
-  constructor(baseDir: string = path.join(process.cwd(), '.workspace')) {
-    this.baseDir = baseDir;
-    this.forkMode = process.env.FORK_MODE === "true"
-    this.forkOwner = process.env.FORK_OWNER
-    this.forkOrg = process.env.FORK_ORG
-    this.gitClient = new Octokit({
-      userAgent: 'ts-coverage improve v1.0.0',
-      auth: process.env.GITHUB_TOKEN,
-    })
+  constructor(forkConfig: ForkModeConfig, ghConfig: GithubConfig) {
+    this.baseDir = path.join(process.cwd(), '.workspace');
+    this.forkConfig = forkConfig;
+    this.ghConfig = ghConfig;
 
   }
 
-  async prepare(params: { repo: string; owner: string; }): Promise<string> {
+  async prepare(params: { repo: string; owner: string; }): Promise<Repository> {
     const { repo, owner } = params;
 
     let cloneUrl: string = toSshUrl(repo, owner);
 
+    const { enabled: forkMode, owner: forkOwner, org: forkOrg } = this.forkConfig;
+
     // Unique hash is used for the parent directory where the repo is cloned to
     const repoHash = crypto.createHash('md5')
-      .update(`${owner}/${repo}/${this.forkMode}/${this.forkOwner || ''}/${this.forkOrg || ''}`)
+      .update(`${owner}/${repo}/${forkMode}/${forkOwner || ''}/${forkOrg || ''}`)
       .digest('hex');
 
-    // If 'FORK_MODE' fork the repository first, and use the fork URL
-    if (this.forkMode) {
-      const response = await this.gitClient.rest.repos.createFork({
+    // If 'FORK_MODE' fork the repository first, and use the fork URL for cloning
+    if (forkMode) {
+      const  gitClient = this.ghConfig.gitClient;
+      const response = await gitClient.rest.repos.createFork({
         owner,
         repo,
-        ...(this.forkOrg ? {
-          organization: this.forkOrg
+        ...(forkOrg ? {
+          organization: forkOrg
         } : {})
       })
       cloneUrl = response.data.ssh_url
@@ -66,7 +63,17 @@ export class FileSystemRepoPreparer implements RepoPreparer {
     } catch {
       throw new Error('Repository does not exist or cannot be cloned. Please confirm the URL and access.');
     }
-    return repoDir;
-
+    const now = new Date();
+    return new Repository({
+      id: crypto.randomUUID(),
+      owner,
+      repo,
+      forkMode,
+      forkOwner,
+      forkOrg,
+      path: repoDir,
+      updatedAt: now,
+      createdAt: now,
+    });
   }
 }

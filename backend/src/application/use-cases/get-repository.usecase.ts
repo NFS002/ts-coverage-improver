@@ -15,20 +15,22 @@ export class GetRepositoryUseCase {
     const [stats] = await this.jobRepo.statsByRepo(repo.id);
     return {
       id: repo.id,
-      httpsUrl: repo.httpsUrl,
-      sshUrl: repo.sshUrl,
+      openJobs: stats?.open ?? 0,
       createdAt: repo.createdAt,
       updatedAt: repo.updatedAt,
-      openJobs: stats?.open ?? 0,
       queuedJobs: stats?.queued ?? 0,
       totalJobs: stats?.total ?? 0,
     };
   }
 
-  async findByUrls(params: {
-    httpsUrl: string;
-    sshUrl: string;
+  async findByOwnerAndName(params: {
+    repo: string;
+    owner: string;
   }): Promise<Repository | null> {
-    return await this.repositoryRepo.findByUrls(params); 
+    return await this.repositoryRepo.findByOwnerAndName(params)
+  }
+
+  async findById(repoId: string): Promise<Repository | null> {
+    return await this.repositoryRepo.findById(repoId)
   }
 }
