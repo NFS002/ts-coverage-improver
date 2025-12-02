@@ -4,5 +4,10 @@ export interface AiRunnerResult {
 }
 
 export interface AiRunner {
-  run(repoPath: string, filePath: string): Promise<AiRunnerResult>;
+  run(params: {
+    repoPath: string,
+    filePath: string,
+    owner: string,
+    repo: string
+  }): Promise<AiRunnerResult>;
 }

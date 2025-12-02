@@ -37,17 +37,17 @@ export class ImprovementJob {
     this.updatedAt = updatedAt;
   }
 
-  static fromRepositoryDao(repositoryDao: Repository): ImprovementJob {
-    const { id: repoId, owner, path, repo, updatedAt, createdAt } = repositoryDao;
+  static fromRepositoryDao(repositoryDao: Repository, filePath: string): ImprovementJob {
+    const { id: repoId, owner, repo, updatedAt, createdAt } = repositoryDao;
     return new ImprovementJob({
       id: uuid(),
       repoId,
-      filePath: path,
+      filePath,
       status: 'queued',
       prUrl: null,
       log: [`[${new Date().toISOString()}] Job created for ${owner}/${repo}`],
-      createdAt: new Date(),
-      updatedAt: new Date(),
+      createdAt,
+      updatedAt
     });
   }
 

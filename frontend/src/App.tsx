@@ -2,33 +2,38 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { z } from 'zod';
 import './App.css';
 
+type JobStatus = 'queued' | 'running' | 'completed' | 'failed';
+
 type CoverageFile = {
   filePath: string;
   coveragePct: number;
+  include: boolean;
 };
 
 type Job = {
   id: string;
-  repoUrl?: string | null;
-  repoSshUrl?: string | null;
-  repoId?: string;
+  repoId: string;
   filePath: string;
-  status: string;
-  prUrl?: string | null;
+  status: JobStatus;
+  prUrl: string | null;
   log: string[];
   createdAt: string;
   updatedAt: string;
 };
 
-type RepositorySummary = {
+type Repository = {
   id: string;
-  httpsUrl: string;
-  sshUrl: string;
   createdAt: string;
   updatedAt: string;
   openJobs: number;
   queuedJobs: number;
   totalJobs: number;
+  owner?: string;
+  repo?: string;
+  path?: string;
+  forkMode?: boolean;
+  forkOwner?: string | null;
+  forkOrg?: string | null;
 };
 
 const GIT_URL_REGEX = /^https:\/\/github\.com\/[\w.-]+\/[\w.-]+(?:\.git)?(?:#)?$/;
@@ -39,19 +44,28 @@ const repoSchema = z.object({
     error: 'Please enter a valid git repoistory URL (https only)'
   })
 });
-const repoSelectorSchema = z
-  .object({
-    repoId: z.string().uuid().optional(),
-    repoUrl: repoSchema.shape.repoUrl.optional(),
-  })
-  .refine((value) => Boolean(value.repoId || value.repoUrl), 'Select a repository or enter a URL');
-const createJobSchema = repoSelectorSchema.safeExtend({
+const createJobSchema = z.object({
+  repoId: z.string({ error: 'repoId is required' }).uuid('repoId must be a valid UUID'),
   filePath: z.string({ error: 'filePath is required' }).trim().min(1, 'filePath is required'),
 });
 
+const toRepoLabel = (repo: Pick<Repository, 'owner' | 'repo' | 'path' | 'id'> | null | undefined) => {
+  if (!repo) return '';
+  if (repo.owner && repo.repo) return `${repo.owner}/${repo.repo}`;
+  if (repo.path) return repo.path;
+  return repo.id;
+};
+
+const toRepoHttpsUrl = (repo: Pick<Repository, 'owner' | 'repo'> | null | undefined) => {
+  if (repo?.owner && repo?.repo) {
+    return `https://github.com/${repo.owner}/${repo.repo}.git`;
+  }
+  return null;
+};
+
 function App() {
-  const [repoUrl, setRepoUrl] = useState('https://github.com/bitjson/typescript-starter.git');
-  const [repositories, setRepositories] = useState<RepositorySummary[]>([]);
+  const [repoUrl, setRepoUrl] = useState('https://github.com/nea/Typescript-Starter.git');
+  const [repositories, setRepositories] = useState<Repository[]>([]);
   const [selectedRepoId, setSelectedRepoId] = useState<string | null>(null);
   const [coverageByRepo, setCoverageByRepo] = useState<Record<string, CoverageFile[]>>({});
   const [jobsByRepo, setJobsByRepo] = useState<Record<string, Job[]>>({});
@@ -64,6 +78,7 @@ function App() {
   const selectedRepo = selectedRepoId
     ? repositories.find((repo) => repo.id === selectedRepoId) ?? null
     : null;
+  const selectedRepoLabel = useMemo(() => toRepoLabel(selectedRepo), [selectedRepo]);
   const hasSelectedRepo = Boolean(selectedRepoId);
   const coverage = useMemo(
     () => (selectedRepoId ? coverageByRepo[selectedRepoId] ?? [] : []),
@@ -77,23 +92,37 @@ function App() {
   const hasJobsForRepo = selectedRepoId ? selectedRepoId in jobsByRepo : false;
 
   const lowCoverage = useMemo(
-    () => coverage.filter((f) => f.coveragePct < 80),
+    () => coverage.filter((f) => f.coveragePct < 50),
     [coverage],
   );
 
-  const upsertRepository = useCallback((repo: RepositorySummary) => {
+  const upsertRepository = useCallback((repo: Partial<Repository> & { id: string }) => {
     setRepositories((prev) => {
-      const idx = prev.findIndex((r) => r.id === repo.id);
-      if (idx >= 0) {
-        const next = [...prev];
-        next[idx] = repo;
-        return next;
+      const existing = prev.find((r) => r.id === repo.id);
+      const merged: Repository = {
+        id: repo.id,
+        createdAt: repo.createdAt ?? existing?.createdAt ?? new Date().toISOString(),
+        updatedAt: repo.updatedAt ?? existing?.updatedAt ?? new Date().toISOString(),
+        openJobs: repo.openJobs ?? existing?.openJobs ?? 0,
+        queuedJobs: repo.queuedJobs ?? existing?.queuedJobs ?? 0,
+        totalJobs: repo.totalJobs ?? existing?.totalJobs ?? 0,
+        owner: repo.owner ?? existing?.owner,
+        repo: repo.repo ?? existing?.repo,
+        path: repo.path ?? existing?.path,
+        forkMode: repo.forkMode ?? existing?.forkMode,
+        forkOwner: repo.forkOwner ?? existing?.forkOwner ?? null,
+        forkOrg: repo.forkOrg ?? existing?.forkOrg ?? null,
+      };
+
+      if (existing) {
+        return prev.map((r) => (r.id === repo.id ? merged : r));
       }
-      return [...prev, repo];
+      return [...prev, merged];
     });
   }, []);
 
-  const loadRepositories = useCallback(async () => {
+  // No need to wrap in useCallback - as this should only be called once on load
+  const loadRepositories = async () => {
     setLoadingRepositories(true);
     try {
       const res = await fetch(`${apiBase}/repositories`);
@@ -101,19 +130,25 @@ function App() {
         const message = (await extractFetchError(res)) ?? 'Failed to load repositories';
         throw new Error(message);
       }
-      const json: RepositorySummary[] = await res.json();
-      setRepositories(json);
-      if (!selectedRepoId && json.length > 0) {
-        setSelectedRepoId(json[0].id);
-        setRepoUrl(json[0].httpsUrl);
-      }
+      const repositories: Repository[] = await res.json();
+      // Append repositories only to local state.
+      // React hooks are called twice in strict mode, so avoid duplications
+        
+      repositories.forEach((repo) => {
+        setRepositories((prev) => {
+          if (prev.find((r) => r.id === repo.id)) {
+            return prev;
+          }
+          return [...prev, repo];
+        });
+      });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to load repositories';
       setError(message);
     } finally {
       setLoadingRepositories(false);
     }
-  }, [selectedRepoId]);
+  }
 
   const refreshRepository = async (repoId: string) => {
     try {
@@ -122,7 +157,7 @@ function App() {
         const message = (await extractFetchError(res)) ?? 'Failed to refresh repository';
         throw new Error(message);
       }
-      const repo: RepositorySummary = await res.json();
+      const repo: Repository = await res.json();
       upsertRepository(repo);
       await loadJobsForRepo(repoId);
     } catch (err: unknown) {
@@ -132,8 +167,9 @@ function App() {
   };
 
   const loadCoverage = useCallback(async (opts?: { repoId?: string; repoUrlOverride?: string }) => {
-    const targetRepoId = opts?.repoId ?? selectedRepoId;
-    const targetRepoUrl = opts?.repoUrlOverride ?? repoUrl;
+    const hasUrlOverride = typeof opts?.repoUrlOverride === 'string';
+    const targetRepoId = opts?.repoId ?? (hasUrlOverride ? undefined : selectedRepoId);
+    const targetRepoUrl = hasUrlOverride ? opts?.repoUrlOverride ?? '' : repoUrl;
 
     setError(null);
     setLoadingCoverage(true);
@@ -160,11 +196,14 @@ function App() {
         throw new Error(message);
       }
       const json = await res.json();
-      const repo: RepositorySummary = json.repository;
-      const files: CoverageFile[] = json.files || [];
+      const repo: Partial<Repository> & { id: string } = json.repository;
+      const files: CoverageFile[] = json.files?.filter((file: CoverageFile) => file.include) ?? [];
       upsertRepository(repo);
       setSelectedRepoId(repo.id);
-      setRepoUrl(repo.httpsUrl);
+      const derivedUrl = toRepoHttpsUrl(repo) ?? targetRepoUrl;
+      if (derivedUrl) {
+        setRepoUrl(derivedUrl);
+      }
       setCoverageByRepo((prev) => ({ ...prev, [repo.id]: files }));
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Something went wrong';
@@ -174,42 +213,10 @@ function App() {
     }
   }, [repoUrl, selectedRepoId, upsertRepository]);
 
-  
+
   const analyse = useCallback(async () => {
-    setError(null);
-    setLoadingCoverage(true);
-    try {
-      let res: Response;
-      const validation = repoSchema.safeParse({ repoUrl });
-      if (!validation.success) {
-        setError(validation.error.issues.map((i) => i.message)[0]);
-        return;
-      }
-      const normalizedUrl = validation.data.repoUrl;
-      setRepoUrl(normalizedUrl);
-      res = await fetch(`${apiBase}/coverage/analyse`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ repoUrl: normalizedUrl }),
-      });
-      if (!res.ok) {
-        const message = (await extractFetchError(res)) ?? 'Failed to load coverage';
-        throw new Error(message);
-      }
-      const json = await res.json();
-      const repo: RepositorySummary = json.repository;
-      const files: CoverageFile[] = json.files || [];
-      upsertRepository(repo);
-      setSelectedRepoId(repo.id);
-      setRepoUrl(repo.httpsUrl);
-      setCoverageByRepo((prev) => ({ ...prev, [repo.id]: files }));
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Something went wrong';
-      setError(message);
-    } finally {
-      setLoadingCoverage(false);
-    }
-  }, [repoUrl, selectedRepoId, upsertRepository]);
+    await loadCoverage({ repoId: undefined, repoUrlOverride: repoUrl });
+  }, [loadCoverage, repoUrl]);
 
   const loadJobsForRepo = useCallback(async (repoId: string) => {
     setLoadingJobs(true);
@@ -219,15 +226,32 @@ function App() {
         const message = (await extractFetchError(res)) ?? 'Failed to load jobs';
         throw new Error(message);
       }
-      const json = await res.json();
-      setJobsByRepo((prev) => ({ ...prev, [repoId]: json }));
+      const jobs: Job[] = await res.json();
+      const repoIdx = repositories.findIndex((r) => r.id === repoId);
+      setJobsByRepo((prev) => ({ ...prev, [repoId]: jobs }));
+      if (repoIdx === -1) {
+        console.warn(`Repository ${repoId} not found`, {
+          repositories
+        });
+        return;
+      }
+      const openJobsForRepo = jobs.filter((j) => j.status === 'queued' || j.status === 'running');
+      const queuedJobsForRepo = openJobsForRepo.filter((j) => j.status === 'queued');
+      const totalJobsForRepo = jobs.length;
+      setRepositories((prev) => {
+        const next = [...prev];
+        next[repoIdx].openJobs = openJobsForRepo.length;
+        next[repoIdx].queuedJobs = queuedJobsForRepo.length;
+        next[repoIdx].totalJobs = totalJobsForRepo;
+        return next;
+      });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to load jobs';
       setError(message);
     } finally {
       setLoadingJobs(false);
     }
-  }, []);
+  }, [repositories, jobsByRepo]);
 
   const ensureRepoData = useCallback(async (repoId: string) => {
     if (!coverageByRepo[repoId]) {
@@ -238,20 +262,20 @@ function App() {
 
   const requestImprovement = async (filePath: string) => {
     setError(null);
-    const selectedRepoUrl = selectedRepo?.httpsUrl;
-    const validation = createJobSchema.safeParse({
-      repoId: selectedRepoId ?? undefined,
-      repoUrl: selectedRepoUrl ?? repoUrl,
-      filePath,
-    });
+    if (!selectedRepoId) {
+      setError('Select a repository before creating a job');
+      return;
+    }
+    const validation = createJobSchema.safeParse({ repoId: selectedRepoId, filePath });
     if (!validation.success) {
       setError(validation.error.issues.map((i) => i.message).join('; '));
       return;
     }
 
-    const payload = validation.data.repoId
-      ? { repoId: validation.data.repoId, filePath: validation.data.filePath }
-      : { repoUrl: validation.data.repoUrl, filePath: validation.data.filePath };
+    const payload = {
+      repoId: validation.data.repoId,
+      filePath: validation.data.filePath,
+    };
     const repoIdForJob = validation.data.repoId;
 
     try {
@@ -264,49 +288,48 @@ function App() {
         const message = (await extractFetchError(res)) ?? 'Unable to create job';
         throw new Error(message);
       }
-      const job = await res.json();
+      const job: Job = await res.json();
       const repoKey = job.repoId ?? repoIdForJob;
-      if (repoKey) {
-        setJobsByRepo((prev) => ({
-          ...prev,
-          [repoKey]: [job, ...(prev[repoKey] ?? [])],
-        }));
-        setSelectedRepoId(repoKey);
-        if (validation.data.repoUrl) {
-          setRepoUrl(validation.data.repoUrl);
-        }
-        void refreshRepository(repoKey);
-        upsertRepository(
-          repositories.find((r) => r.id === repoKey) ?? {
-            id: repoKey,
-            httpsUrl: validation.data.repoUrl ?? job.repoUrl ?? selectedRepo?.httpsUrl ?? '',
-            sshUrl: job.repoSshUrl ?? selectedRepo?.sshUrl ?? '',
-            createdAt: job.createdAt,
-            updatedAt: job.updatedAt,
-            openJobs: 0,
-            queuedJobs: 0,
-            totalJobs: 0,
-          },
-        );
+      if (!repoKey) {
+        return;
       }
+      setJobsByRepo((prev) => ({
+        ...prev,
+        [repoKey]: [job, ...(prev[repoKey] ?? [])],
+      }));
+      setSelectedRepoId(repoKey);
+      refreshRepository(repoKey);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Unable to create job';
       setError(message);
     }
   };
 
+  // Should only be called once on initial load, but called twice due to React strict mode
+  // so ensure idempotency
   useEffect(() => {
     loadRepositories();
-  }, [loadRepositories]);
+  }, []);
 
+
+  /* Continously poll for job updates on the selected repository
+  /* Only if there are any queued or running jobs */
   useEffect(() => {
-    if (!selectedRepoId) return;
+    if (!selectedRepoId || loadingRepositories) return;
+    const repo = repositories.find((r) => r.id === selectedRepoId);
+    if (!repo) {
+      console.warn(`Selected repo ID ${selectedRepoId} not found in repositories`);
+      return;
+    }
+    const { queuedJobs, openJobs } = repo;
+    if (queuedJobs === 0 && openJobs === 0) return;
+    // Load coverage and jobs for selected repo
     ensureRepoData(selectedRepoId);
     const id = setInterval(() => {
       loadJobsForRepo(selectedRepoId);
     }, 3000);
     return () => clearInterval(id);
-  }, [selectedRepoId]);
+  }, [selectedRepoId, loadingJobs]);
 
   useEffect(() => {
     if (!hasSelectedRepo && activeTab !== 'repositories') {
@@ -406,9 +429,9 @@ function App() {
           <div className="panel-header">
             <div>
               <h2>Coverage by file</h2>
-              {selectedRepo && <p className="muted small">Repository: {selectedRepo.httpsUrl}</p>}
+              {selectedRepo && <p className="muted small">Repository: {selectedRepoLabel}</p>}
             </div>
-            <span className="badge">Below 80%: {lowCoverage.length}</span>
+            <span className="badge">Below 50%: {lowCoverage.length}</span>
           </div>
           {!selectedRepo && (
             <p className="muted">Select a repository from the Repositories tab or analyse a URL to load coverage.</p>
@@ -462,7 +485,7 @@ function App() {
               <h2>Repositories</h2>
               <p className="muted small">Click a repository to load its coverage and jobs.</p>
             </div>
-            <span className="badge subtle">{repositories.length} tracked</span>
+            <span className="badge subtle">{repositories.length}</span>
           </div>
           {loadingRepositories && <p className="muted">Loading repositories...</p>}
           {!loadingRepositories && repositories.length === 0 && (
@@ -475,25 +498,17 @@ function App() {
                 className={`repo-card ${repo.id === selectedRepoId ? 'selected' : ''}`}
                 onClick={() => {
                   setSelectedRepoId(repo.id);
-                  setRepoUrl(repo.httpsUrl);
-                  void ensureRepoData(repo.id);
+                  const derivedUrl = toRepoHttpsUrl(repo);
+                  if (derivedUrl) {
+                    setRepoUrl(derivedUrl);
+                  }
+                  ensureRepoData(repo.id);
                 }}
               >
                 <div className="repo-header">
                   <div>
-                    <p className="mono small">{repo.httpsUrl}</p>
-                    <p className="muted small">ID: {repo.id}</p>
+                    <p className="mono small">{toRepoLabel(repo)}</p>
                   </div>
-                  <button
-                    className="ghost small-btn"
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      void refreshRepository(repo.id);
-                    }}
-                  >
-                    Refresh
-                  </button>
                 </div>
                 <div className="repo-stats">
                   <span className="pill subtle">Open: {repo.openJobs}</span>
@@ -515,7 +530,7 @@ function App() {
           <div className="panel-header">
             <div>
               <h2>Jobs</h2>
-              {selectedRepo && <p className="muted small">Repository: {selectedRepo.httpsUrl}</p>}
+              {selectedRepo && <p className="muted small">Repository: {selectedRepoLabel}</p>}
             </div>
             <span className="badge subtle">{jobs.length} total</span>
           </div>
@@ -525,7 +540,7 @@ function App() {
             <p className="muted">Jobs for this repository have not been loaded yet.</p>
           )}
           {selectedRepo && hasJobsForRepo && jobs.length === 0 && (
-            <p className="muted">No jobs yet. Kick one off from the table.</p>
+            <p className="muted">No jobs yet. Start one by clicking on 'improve' on a file in the coverage tab.</p>
           )}
           {selectedRepo && jobs.length > 0 && (
             <div className="job-list">
@@ -538,7 +553,6 @@ function App() {
                     </div>
                     <span className={`status ${job.status}`}>{job.status}</span>
                   </div>
-                  {job.repoUrl && <p className="muted small">{job.repoUrl}</p>}
                   {job.prUrl && (
                     <p className="small">
                       PR: <a href={job.prUrl} target="_blank" rel="noreferrer">{job.prUrl}</a>

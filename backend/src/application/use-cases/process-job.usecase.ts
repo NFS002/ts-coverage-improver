@@ -1,9 +1,8 @@
 import { JobRepository } from '../../domain/repositories/job.repository';
 import { RepoPreparer } from '../ports/repo-preparer';
-import { AiRunner } from '../ports/ai-runner';
+import { AiRunner, AiRunnerResult } from '../ports/ai-runner';
 import { PullRequestService } from '../ports/pr-service';
 import { RepositoryRepository } from '../../domain/repositories/repository.repository';
-import { destructureGithubSshUrl } from '@utils';
 
 export class ProcessJobUseCase {
   constructor(
@@ -12,7 +11,7 @@ export class ProcessJobUseCase {
     private readonly repoPreparer: RepoPreparer,
     private readonly aiRunner: AiRunner,
     private readonly prService: PullRequestService,
-  ) {}
+  ) { }
 
   async execute(jobId: string): Promise<void> {
     const job = await this.jobRepository.findById(jobId);
@@ -20,42 +19,33 @@ export class ProcessJobUseCase {
       throw new Error(`Job ${jobId} not found`)
     }
 
-    const repository = await this.repositoryRepository.findById(jobId);
-    if (!repository) {
-      job.markFailed('Repository not found for job')
-      await this.jobRepository.save(job)
-      throw new Error(`Repository not found for job ${jobId}`)
-    }
+    job.markRunning('Preparing to start')
+    this.jobRepository.save(job);
 
-    job.markRunning('Preparing repository workspace')
+      const repository = await this.repositoryRepository.findById(job.repoId);
+      if (!repository) {
+        console.error(`Repository not found for job ${jobId}`);
+        throw new Error('Repository not found')
+      }
 
-    try {
-      const { owner, repo, forkMode, forkOrg, forkOwner } = repository
-      // const repoPath = await this.repoPreparer.prepare({ owner, repo });
-      // await this.jobRepository.appendLog(job.id, `Workspace ready at ${repoPath}`);
+      const { owner, repo, path, forkMode, forkOrg, forkOwner } = repository
 
-      // const aiResult = await this.aiRunner.run(repoPath, job.filePath);
-      // await this.jobRepository.appendLog(job.id, aiResult.output.trim() || 'AI CLI finished');
-
-      // let prUrl: string | null = null;
-      // if (aiResult.success) {
-      //   const branchName = `coverage-improvement/${job.id}`;
-      //   const pr = await this.prService.openPullRequest(
-      //     repository.sshUrl,
-      //     branchName,
-      //     `Improve tests for ${job.filePath}`,
-      //     'Automated test generation job output',
-      //   );
-      //   prUrl = pr.url;
-      //   await this.jobRepository.appendLog(job.id, `PR opened at ${pr.url}`);
-      //   await this.jobRepository.updateStatus(job.id, 'completed', prUrl);
-      // } else {
-      //   await this.jobRepository.appendLog(job.id, 'AI CLI reported failure');
-      //   await this.jobRepository.updateStatus(job.id, 'failed');
-      // }
-    } catch (err: any) {
-      job.markFailed(`Error: ${err?.message ?? err}`)
-      this.jobRepository.save(job)
-    }
+      this.aiRunner.run({
+        filePath: job.filePath,
+        repoPath: path,
+        owner: forkMode ?  (forkOrg! ?? forkOwner!) : owner,
+        repo,
+      }).then((res: AiRunnerResult) => {
+        const { success, output: prUrl } = res;
+        console.info(`AI run completed for job ${job.id}`);
+        job.markCompleted(prUrl, `Job completed: success=${success}`);
+        this.jobRepository.save(job);
+      }).catch((err) => {
+        console.error(`AI run failed for job ${job.id}:`, err);
+        job.markFailed(`AI run error`);
+        this.jobRepository.save(job);
+      }).finally(async () => {
+        this.jobRepository.save(job);
+      });
   }
 }

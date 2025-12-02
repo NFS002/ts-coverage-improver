@@ -1,5 +1,5 @@
 import { BadRequestException, Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
-import { z, ZodError } from 'zod';
+import { file, z, ZodError } from 'zod';
 import { AnalyseCoverageUseCase } from '../../application/use-cases/analyse-coverage.usecase';
 import { StartImprovementUseCase } from '../../application/use-cases/start-improvement.usecase';
 import { ListJobsUseCase } from '../../application/use-cases/list-jobs.usecase';
@@ -9,9 +9,8 @@ import { EnsureRepositoryUseCase } from '../../application/use-cases/ensure-repo
 import { ListRepositoriesUseCase } from '../../application/use-cases/list-repositories.usecase';
 import { RepositorySummaryDto } from '../../application/dto/repository-summary.dto';
 import { GetRepositoryUseCase } from '../../application/use-cases/get-repository.usecase';
-import { destructureGithubHttpsUrl, destructureGithubSshUrl, GITHUB_HTTPS_URL_REGEX, httpsToSshUrl } from '@utils';
+import { destructureGitHubHttpsUrl, GITHUB_HTTPS_URL_REGEX } from '@utils';
 import { CoverageFile } from 'domain/entities/coverage-file.entity';
-import path from 'path/win32';
 import { ImprovementJob } from 'domain/entities/improvement-job.entity';
 
 @Controller()
@@ -34,8 +33,9 @@ export class ApiController {
   /* Analyse coverage for a new remote repository */
   @Post('/coverage/analyse')
   async analyseCoverageForUrl(@Body() body: { repoUrl?: string }) {
+    console.info("Received request to analyse coverage: ");
     const { repoUrl: httpsUrl } = parseWithZod(repoUrlSchema, body);
-    const destructured = destructureGithubHttpsUrl(httpsUrl)
+    const destructured = destructureGitHubHttpsUrl(httpsUrl)
     // Check if a repository record exists for the same url
     const repoDao = await this.getRepository.findByOwnerAndName(destructured);
     if (repoDao) {
@@ -52,7 +52,7 @@ export class ApiController {
       } = await this.analyseCoverage.prepareAndScan(destructured);
       const normalisedFiles = coverageFiles.map(file => {
         const normalisedPath = file.filePath.replace(repositoryDao.path + '/', '');
-        return new CoverageFile(normalisedPath, file.coveragePct);
+        return new CoverageFile(normalisedPath, file.coveragePct, file.include);
       });
       const repository = await this.ensureRepository.createRepository(repositoryDao);
       return { repository, files: normalisedFiles };
@@ -65,13 +65,22 @@ export class ApiController {
   /* Rescan a previously analysed repository and return coverage files */
   @Get('/repositories/:id/coverage')
   async coverageForRepository(@Param('id') id: string) {
-    const repository = await this.getRepository.findById(id);
-    if (!repository) {
+    const repositoryDao = await this.getRepository.findById(id);
+    if (!repositoryDao) {
       throw new BadRequestException('Repository not found');
     }
     try {
-      const files = await this.analyseCoverage.scan('path not stored yet');
-      return { repository, files };
+      const rawCoverageFiles = await this.analyseCoverage.scan(repositoryDao.path);
+      const normalisedFiles = rawCoverageFiles.map(file => {
+        const normalisedPath = file.filePath.replace(repositoryDao.path + '/', '');
+        const f = new CoverageFile(normalisedPath, file.coveragePct, file.include);
+        console.info("Normalised file: ", {
+          original: file,
+          normalised: f,
+        });
+        return f
+      });
+      return { repository: repositoryDao, files: normalisedFiles };
     } catch (err: any) {
       throw new BadRequestException(err?.message ?? 'Unable to analyse coverage');
     }
@@ -113,7 +122,7 @@ export class ApiController {
       throw new BadRequestException('Repository not found');
     }
     try {
-      const job = await this.startImprovement.execute(repository);
+      const job = await this.startImprovement.execute(repository, filePath);
       return mapJob(job);
     } catch (err: any) {
       throw new BadRequestException(err?.message ?? 'Unable to create job');
@@ -122,8 +131,7 @@ export class ApiController {
 
   @Get('/repositories')
   async repositories() {
-    const repos = await this.listRepositories.execute();
-    return repos.map(mapRepository);
+    return await this.listRepositories.execute();
   }
 
   @Get('/repositories/:id')
@@ -132,7 +140,7 @@ export class ApiController {
     if (!repo) {
       throw new BadRequestException('Repository not found');
     }
-    return mapRepository(repo);
+    return repo;
   }
 }
 
@@ -145,15 +153,6 @@ const mapJob = (job: ImprovementJob) => ({
   log: job.log,
   createdAt: job.createdAt,
   updatedAt: job.updatedAt,
-});
-
-const mapRepository = (repo: RepositorySummaryDto) => ({
-  id: repo.id,
-  createdAt: repo.createdAt,
-  updatedAt: repo.updatedAt,
-  openJobs: repo.openJobs,
-  queuedJobs: repo.queuedJobs,
-  totalJobs: repo.totalJobs,
 });
 
 const repoUrlSchema = z.object({

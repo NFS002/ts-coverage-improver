@@ -85,9 +85,20 @@ button:disabled {
   box-shadow: 0 10px 25px rgba(99, 102, 241, 0.35);
 }
 
+.primary:hover {
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.35), 0 10px 25px rgba(99, 102, 241, 0.35);
+}
+
 .ghost {
-  background: #eef2ff;
+  background: #e0e7ff;
   color: #312e81;
+  border: 1px solid #c7d2fe;
+}
+
+.ghost:hover {
+  background: #c7d2fe;
+  box-shadow: 0 0 0 2px rgba(49, 46, 129, 0.3);
+  border-color: #818cf8;
 }
 
 .panels {

@@ -41,7 +41,7 @@ export function createDbClient(): DbClient {
       path TEXT NOT NULL UNIQUE,
       createdAt INTEGER NOT NULL,
       updatedAt INTEGER NOT NULL,
-      UNIQUE(owner, repo, forkMode, forkOwner, forkOrg),
+      UNIQUE(owner, repo, forkMode, forkOwner, forkOrg)
     );
   `);
 

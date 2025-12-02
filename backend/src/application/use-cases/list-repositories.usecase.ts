@@ -9,21 +9,29 @@ export class ListRepositoriesUseCase {
   ) {}
 
   async execute(): Promise<RepositorySummaryDto[]> {
-    const [repositories, stats] = await Promise.all([
+    const [repositoryDaos, repositoryStats] = await Promise.all([
       this.repositoryRepo.list(),
       this.jobRepo.statsByRepo(),
     ]);
-    const statsByRepo = new Map(stats.map((s) => [s.repoId, s]));
-    return repositories.map((repo) => {
-      const repoStats = statsByRepo.get(repo.id);
-      return {
-        id: repo.id,
-        createdAt: repo.createdAt,
-        updatedAt: repo.updatedAt,
-        openJobs: repoStats?.open ?? 0,
-        queuedJobs: repoStats?.queued ?? 0,
-        totalJobs: repoStats?.total ?? 0,
+    const statsByRepo = new Map(repositoryStats.map((s) => [s.repoId, s]));
+    return repositoryDaos.map((repositoryDao) => {
+      const repoStats = statsByRepo.get(repositoryDao.id);
+      const { id, repo, owner, forkMode, forkOwner, forkOrg, createdAt, updatedAt } = repositoryDao;
+      const { open: openJobs, queued: queuedJobs, total: totalJobs } = repoStats || { open: 0, queued: 0, total: 0 };
+      const repoSummary: RepositorySummaryDto =  {
+        id,
+        repo,
+        owner,
+        forkMode,
+        forkOwner,
+        forkOrg,
+        createdAt,
+        updatedAt,
+        openJobs,
+        queuedJobs,
+        totalJobs,
       };
+      return repoSummary;
     });
   }
 }

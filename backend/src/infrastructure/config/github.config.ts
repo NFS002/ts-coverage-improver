@@ -10,7 +10,7 @@ export class GithubConfig {
             console.error("GITHUB_TOKEN is not set, some commands may not work properly");
         }
         this.gitClient = new Octokit({
-            userAgent: 'ts-coverage improve v1.0.0',
+            userAgent: 'ts-coverage-improver v1.0.0',
             auth: token,
         })
     }

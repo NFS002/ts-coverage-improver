@@ -10,16 +10,23 @@ export class GetRepositoryUseCase {
   ) { }
 
   async execute(id: string): Promise<RepositorySummaryDto | null> {
-    const repo = await this.repositoryRepo.findById(id);
-    if (!repo) return null;
-    const [stats] = await this.jobRepo.statsByRepo(repo.id);
+    const repositoryDao = await this.repositoryRepo.findById(id);
+    if (!repositoryDao) return null;
+    const [stats] = await this.jobRepo.statsByRepo(repositoryDao.id);
+    const { repo, owner, forkMode, forkOwner, forkOrg, createdAt, updatedAt } = repositoryDao;
+    const { open: openJobs, queued: queuedJobs, total: totalJobs } = stats || { open: 0, queued: 0, total: 0 };
     return {
-      id: repo.id,
-      openJobs: stats?.open ?? 0,
-      createdAt: repo.createdAt,
-      updatedAt: repo.updatedAt,
-      queuedJobs: stats?.queued ?? 0,
-      totalJobs: stats?.total ?? 0,
+      id,
+      repo,
+      owner,
+      forkMode,
+      forkOwner,
+      forkOrg,
+      createdAt,
+      updatedAt,
+      openJobs,
+      queuedJobs,
+      totalJobs,
     };
   }
 

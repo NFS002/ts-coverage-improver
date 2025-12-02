@@ -78,3 +78,5 @@ export default defineConfig([
 - Page padding was reduced and the content width expanded to make better use of horizontal space while keeping a small gutter for readability.
 - A new Repositories tab lists scanned repositories (with job counts) and lets you select or refresh a repo; the Coverage and Jobs tabs now scope their data to the currently selected repository.
 - Coverage analysis now calls `POST /coverage/analyse` for new URLs and `GET /repositories/:id/coverage` for existing repositories; jobs still accept either `repoId` or `repoUrl` when adding a new repository via the form.
+
+- Remove logs

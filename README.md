@@ -29,7 +29,8 @@ npm run dev -- --host
   - `domain/`: entities (`CoverageFile`, `ImprovementJob`), value objects (`JobStatus`), and ports (`JobRepository`, `CoverageScanner`).
   - `application/`: use cases (`AnalyseCoverageUseCase`, `StartImprovementUseCase`, `ProcessJobUseCase`, etc.) that orchestrate domain services and ports.
   - `infrastructure/`: adapters (Drizzle + SQLite repo, Istanbul coverage scanner, AI CLI runner, dry-run PR service, filesystem repo prep, HTTP controller, in-memory queue).
-- **Coverage scanning**: `IstanbulCoverageScanner` looks for `coverage/coverage-summary.json` (or a root `coverage-summary.json`). If none is found, it reads `tsconfig.json` include/exclude globs to find `.ts` files (still skipping tests and declarations) and tags them with a placeholder 42% coverage so you can still drive the workflow. If the config is missing or cannot be parsed, it falls back to a simple repo walk (skipping `.git`, `node_modules`, `coverage`).
+- **Coverage scanning**: `LocalTsCoverageScanner` looks for `ts-coverage-improver.summary.json`. If none is found, it reads `tsconfig.json`, include/exclude globs to find `.ts` files. If the config doesnt exist, it looks for the `tsconfig.json` and parses this to find which files to include/exclude. If no `tsconfig.json` is found, it performs a DFS traversal
+of the entire repo, skipping hidden directories, dependencies, etc.
 - **Job handling**: `StartImprovementUseCase` writes a queued job to SQLite and drops it into `InMemoryJobQueue`. The queue processes one job at a time via `ProcessJobUseCase` to keep work serialized per process (simpler than per-repo locks for this demo).
 - **AI CLI isolation**: `SimpleAiRunner` shells out with the `AI_CLI_COMMAND` template (defaults to `echo "Generated tests for {file}"`). Placeholders `{repo}` and `{file}` are replaced with the workspace path and target file, allowing you to wrap any CLI you trust.
 - **PR publishing**: `DryRunPullRequestService` returns a deterministic fake PR URL (`<repo>/pull/<id>`) instead of hitting GitHub. Swap it for a real implementation if you provide a token.
@@ -38,10 +39,10 @@ npm run dev -- --host
 ## API surface (NestJS)
 
 - `GET /health` – liveness check.
-- `POST /coverage/analyse` – `{repoUrl}` to prepare the repo and return `{repository, files:[{filePath, coveragePct}]}`.
-- `GET /repositories/:id/coverage` – prepare the repo by id and return `{repository, files:[{filePath, coveragePct}]}`.
-- `POST /jobs` – `{repoId?, repoUrl?, filePath}` → creates a queued job for a repository (falls back to repoUrl when no id is provided). Jobs store a strict `repoId` foreign key to repositories; URLs are only returned for display.
-- `GET /jobs?repoId=<id>` – list jobs (filtered to a repository when `repoId` is provided) with status/logs/PR URLs. Each job includes `repoId` plus the repository HTTPS/SSH URLs for convenience.
+- `POST /coverage/analyse` – `{repoUrl}` to prepare the repo and return `{repository, files:[{filePath, coveragePct}]}` (repository payload includes id/owner/repo/path/fork metadata).
+- `GET /repositories/:id/coverage` – prepare the repo by id and return `{repository, files:[{filePath, coveragePct}]}` (repository payload includes id/owner/repo/path/fork metadata).
+- `POST /jobs` – `{repoId, filePath}` → creates a queued job for a tracked repository (URL inputs are no longer accepted here). Jobs store a strict `repoId` foreign key to repositories.
+- `GET /jobs?repoId=<id>` – list jobs (filtered to a repository when `repoId` is provided) with status/logs/PR URLs. Each job includes `repoId`, `filePath`, status, optional `prUrl`, log, and timestamps.
 - `GET /jobs/:id` – single job.
 - `GET /repositories` – tracked repositories with open/queued/total job counts.
 - `GET /repositories/:id` – single repository summary.
@@ -72,7 +73,7 @@ Paths: see `backend/src/infrastructure/http/api.controller.ts`.
 - **Coverage inputs**: Istanbul summary parsing keeps things realistic; the fallback stub ensures the UI always has data to work with during demos.
 - **tsconfig-aware discovery**: Placeholder coverage now follows `tsconfig.json` include/exclude rules (using TypeScript’s defaults when not provided), converting those globs into include/exclude directories for traversal; this relies on the `typescript` package being available at runtime and falls back to the directory walk if the config cannot be read.
 - **Frontend choice**: Explicit React dashboard (per instructions) instead of a CLI, with polling to reflect job status without WebSockets complexity.
-- **Repository tracking**: Repositories are persisted with HTTPS/SSH URLs and job counts so the UI can scope coverage/jobs per repo and refresh summaries without re-running coverage; “open” = queued + running. Jobs reference repositories via a strict `repoId` foreign key (no SSH URLs stored in the jobs table); existing SQLite data will need a migration to populate `repoId`.
+- **Repository tracking**: Repositories are persisted by owner/repo plus fork metadata; API summaries expose ids and job counts only. Coverage responses add owner/repo/path details, so the UI merges that metadata into the summaries and falls back to displaying the repository id when owner/repo are unavailable. Jobs post `repoId` only (no URL echo on job payloads).
 
 ## Domain glossary
 
@@ -125,3 +126,56 @@ export const EXCLUDED_PATHS = [
 - GIT CLIENT TOKENS!!!
 - AUTH ?
 - Use repo & owner rather than protocol to be repo agnostic
+
+- Global dependencies
+  - Github CLI
+  -  Codex CLI npm i -g @openai/codex
+
+  Prereqs
+
+Node.js 18+
+
+npm install openai @octokit/rest simple-git
+
+Your repo must already have a remote named origin
+
+You have a GitHub token with repo scope
+- Mention AGENTS.md or AGENTS.override.md in the repo, and how this can be used
+
+# ./backend/.workspace/AGENTS.override.md
+
+## ts-coverage-improver
+
+- Always run a build and lint before committing any changes (See the package.json for the exact commands to run)
+- When asked to create a file named ts-coverage-improver.summary.json, this file should have the structure
+
+```json
+
+{
+    "path/to/file1.ts": {
+      "include": true,
+      "filePath": "path/to/file1.ts",
+      "coveragePct": 85.5
+    },
+    "path/to/file2.ts": {
+     "include": true,
+     "filePath": "path/to/file2.ts",
+     "coveragePct": 90.0
+    }
+};
+
+```
+- Any *.ts file recorded in the above json object should always have `included` set to `true`. Any other file type than a typescript (*.ts) file should have `included` set to `false`.
+- If you run into any unexpected errors when trying to run any command, please exit immediately.
+- End every task with a random stoic philisophy quote
+
+
+- codex permssions
+- OpenAIConfig.initialize() not working
+- Global error handling, avoid leaking errors
+such as ENOENT: no such file or directory, stat '/Users/noahfs/dev/ts-coverage-improver/backend/.workspace/35310825b90afb9823912db339e881fajkhkjnhk/blahblah'
+- FORK MODE DOES NOT RESYNC FROM CHANGES TO ORIGINAL REPO!
+- please run `gh repo set-default` to select a default remote repository. 
++ `gh repo sync` 
+- fixes above
+- Remove logs

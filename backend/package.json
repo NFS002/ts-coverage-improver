@@ -21,6 +21,7 @@
     "class-validator": "^0.14.3",
     "dotenv": "^17.2.3",
     "drizzle-orm": "^0.44.7",
+    "execa": "^9.6.1",
     "rxjs": "^7.8.2",
     "uuid": "^13.0.0",
     "zod": "^4.1.13"

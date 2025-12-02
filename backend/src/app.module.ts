@@ -3,7 +3,7 @@ import { ApiController } from './infrastructure/http/api.controller';
 import { createDbClient, DbClient, ForkModeConfig, GithubConfig } from './infrastructure/config';
 import { JobDrizzleRepository } from './infrastructure/repositories/job.drizzle.repository';
 import { FileSystemRepoPreparer } from './infrastructure/github/fs-repo.preparer';
-import { LocalTsCoverageScanner } from './infrastructure/coverage/istanbul-scanner';
+import { LocalTsCoverageScanner } from './infrastructure/coverage/local-ts-coverage-scanner';
 import { SimpleAiRunner } from './infrastructure/ai/simple-ai.runner';
 import { DryRunPullRequestService } from './infrastructure/github/dry-run.pr-service';
 import { ProcessJobUseCase } from './application/use-cases/process-job.usecase';
@@ -53,8 +53,7 @@ import { GetRepositoryUseCase } from './application/use-cases/get-repository.use
     },
     {
       provide: SimpleAiRunner,
-      useFactory: () =>
-        new SimpleAiRunner(process.env.AI_CLI_COMMAND || 'echo "Generated tests for {file}"'),
+      useFactory: () => new SimpleAiRunner(),
     },
     {
       provide: DryRunPullRequestService,
