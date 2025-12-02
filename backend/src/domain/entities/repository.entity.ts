@@ -39,6 +39,19 @@ export class Repository {
     this.path = path;
   }
 
+  public sanitise() {
+    return {
+      id: this.id,
+      repo: this.repo,
+      owner: this.owner,
+      forkMode: this.forkMode,
+      forkOwner: this.forkOwner,
+      forkOrg: this.forkOrg,
+      createdAt: this.createdAt,
+      updatedAt: this.updatedAt,
+    }
+  }
+
   public static fromRow (row: SelectRepositoryRow) {
     return new Repository(row);
   }

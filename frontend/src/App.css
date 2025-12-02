@@ -189,6 +189,10 @@ button:disabled {
   gap: 0.75rem;
 }
 
+.repo-fork-info {
+  color: #991219
+}
+
 .repo-stats {
   display: flex;
   flex-wrap: wrap;
@@ -308,6 +312,10 @@ tr:nth-child(even) {
 
 .small {
   font-size: 0.9rem;
+}
+
+.smaller {
+  font-size: 0.8rem;
 }
 
 .small-btn {

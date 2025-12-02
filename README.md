@@ -179,3 +179,6 @@ such as ENOENT: no such file or directory, stat '/Users/noahfs/dev/ts-coverage-i
 + `gh repo sync` 
 - fixes above
 - Remove logs
+- You shouldnt need to care about the fork at all.
+- Fork config is wrong, should just need to store 'forkedFrom' in DB in case of sync
+- MAKE 'ANALYZE' async

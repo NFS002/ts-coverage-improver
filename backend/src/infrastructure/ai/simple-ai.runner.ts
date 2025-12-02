@@ -86,8 +86,8 @@ export class SimpleAiRunner implements AiRunner {
         throw new Error("PR not found");
       }
       const prUrl = prsListJson[0].url;
-      await execa('git', ['checkout', baseBranch], { cwd: repoPath });
       console.info("PR created at ", prUrl);
+      await execa('git', ['checkout', baseBranch], { cwd: repoPath });
       return { success: true, output: prUrl };
     } catch (err: any) {
       console.error("Error", err);

@@ -1,5 +1,4 @@
-import { and, eq, or } from 'drizzle-orm';
-import { v4 as uuid } from 'uuid';
+import { and, eq } from 'drizzle-orm';
 import { RepositoryRepository } from '../../domain/repositories/repository.repository';
 import { Repository } from '../../domain/entities/repository.entity';
 import  { DbClient, ForkModeConfig } from '../config';

@@ -12,6 +12,7 @@ import { GetRepositoryUseCase } from '../../application/use-cases/get-repository
 import { destructureGitHubHttpsUrl, GITHUB_HTTPS_URL_REGEX } from '@utils';
 import { CoverageFile } from 'domain/entities/coverage-file.entity';
 import { ImprovementJob } from 'domain/entities/improvement-job.entity';
+import { Repository } from 'domain/entities/repository.entity';
 
 @Controller()
 export class ApiController {
@@ -55,7 +56,7 @@ export class ApiController {
         return new CoverageFile(normalisedPath, file.coveragePct, file.include);
       });
       const repository = await this.ensureRepository.createRepository(repositoryDao);
-      return { repository, files: normalisedFiles };
+      return { repository: repository.sanitise(), files: normalisedFiles };
     } catch (err) {
       console.error("Error analysing coverage: ", err);
       throw new BadRequestException('Unable to analyse coverage');
@@ -73,14 +74,9 @@ export class ApiController {
       const rawCoverageFiles = await this.analyseCoverage.scan(repositoryDao.path);
       const normalisedFiles = rawCoverageFiles.map(file => {
         const normalisedPath = file.filePath.replace(repositoryDao.path + '/', '');
-        const f = new CoverageFile(normalisedPath, file.coveragePct, file.include);
-        console.info("Normalised file: ", {
-          original: file,
-          normalised: f,
-        });
-        return f
+        return new CoverageFile(normalisedPath, file.coveragePct, file.include);
       });
-      return { repository: repositoryDao, files: normalisedFiles };
+      return { repository: repositoryDao.sanitise(), files: normalisedFiles };
     } catch (err: any) {
       throw new BadRequestException(err?.message ?? 'Unable to analyse coverage');
     }

@@ -1,24 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { z } from 'zod';
 import './App.css';
-
-type JobStatus = 'queued' | 'running' | 'completed' | 'failed';
+import type { Job } from './types/job';
+import { JobCard } from './components.tsx/JobCard';
 
 type CoverageFile = {
   filePath: string;
   coveragePct: number;
   include: boolean;
-};
-
-type Job = {
-  id: string;
-  repoId: string;
-  filePath: string;
-  status: JobStatus;
-  prUrl: string | null;
-  log: string[];
-  createdAt: string;
-  updatedAt: string;
 };
 
 type Repository = {
@@ -30,7 +19,6 @@ type Repository = {
   totalJobs: number;
   owner?: string;
   repo?: string;
-  path?: string;
   forkMode?: boolean;
   forkOwner?: string | null;
   forkOrg?: string | null;
@@ -49,11 +37,9 @@ const createJobSchema = z.object({
   filePath: z.string({ error: 'filePath is required' }).trim().min(1, 'filePath is required'),
 });
 
-const toRepoLabel = (repo: Pick<Repository, 'owner' | 'repo' | 'path' | 'id'> | null | undefined) => {
-  if (!repo) return '';
-  if (repo.owner && repo.repo) return `${repo.owner}/${repo.repo}`;
-  if (repo.path) return repo.path;
-  return repo.id;
+const toRepoLabel = (repo: Repository | null) => {
+  if (repo?.owner && repo?.repo) return `${repo.owner}/${repo.repo}`;
+  return repo?.id ?? 'Unknown repository';
 };
 
 const toRepoHttpsUrl = (repo: Pick<Repository, 'owner' | 'repo'> | null | undefined) => {
@@ -64,6 +50,7 @@ const toRepoHttpsUrl = (repo: Pick<Repository, 'owner' | 'repo'> | null | undefi
 };
 
 function App() {
+  const [openLogs, setOpenLogs] = useState<Record<string, boolean>>({});
   const [repoUrl, setRepoUrl] = useState('https://github.com/nea/Typescript-Starter.git');
   const [repositories, setRepositories] = useState<Repository[]>([]);
   const [selectedRepoId, setSelectedRepoId] = useState<string | null>(null);
@@ -108,7 +95,6 @@ function App() {
         totalJobs: repo.totalJobs ?? existing?.totalJobs ?? 0,
         owner: repo.owner ?? existing?.owner,
         repo: repo.repo ?? existing?.repo,
-        path: repo.path ?? existing?.path,
         forkMode: repo.forkMode ?? existing?.forkMode,
         forkOwner: repo.forkOwner ?? existing?.forkOwner ?? null,
         forkOrg: repo.forkOrg ?? existing?.forkOrg ?? null,
@@ -133,7 +119,7 @@ function App() {
       const repositories: Repository[] = await res.json();
       // Append repositories only to local state.
       // React hooks are called twice in strict mode, so avoid duplications
-        
+
       repositories.forEach((repo) => {
         setRepositories((prev) => {
           if (prev.find((r) => r.id === repo.id)) {
@@ -235,14 +221,24 @@ function App() {
         });
         return;
       }
-      const openJobsForRepo = jobs.filter((j) => j.status === 'queued' || j.status === 'running');
-      const queuedJobsForRepo = openJobsForRepo.filter((j) => j.status === 'queued');
-      const totalJobsForRepo = jobs.length;
+
+      const { queuedJobs, openJobs } = jobs.reduce((acc, job) => {
+        switch (job.status) {
+          case 'queued':
+            acc.queuedJobs += 1;
+            break;
+          case 'running':
+            acc.openJobs += 1;
+            break;
+        }
+        return acc;
+      }, { queuedJobs: 0, openJobs: 0 });
+
       setRepositories((prev) => {
         const next = [...prev];
-        next[repoIdx].openJobs = openJobsForRepo.length;
-        next[repoIdx].queuedJobs = queuedJobsForRepo.length;
-        next[repoIdx].totalJobs = totalJobsForRepo;
+        next[repoIdx].openJobs = openJobs;
+        next[repoIdx].queuedJobs = queuedJobs;
+        next[repoIdx].totalJobs = jobs.length;
         return next;
       });
     } catch (err: unknown) {
@@ -510,6 +506,13 @@ function App() {
                     <p className="mono small">{toRepoLabel(repo)}</p>
                   </div>
                 </div>
+                {repo.forkMode &&                 
+                  <div className="repo-fork-info">
+                    <div>
+                      <i className="mono smaller">Forked for: {repo.forkOrg ?? repo.forkOwner}</i>
+                    </div>
+                  </div>
+                }
                 <div className="repo-stats">
                   <span className="pill subtle">Open: {repo.openJobs}</span>
                   <span className="pill subtle">Queued: {repo.queuedJobs}</span>
@@ -545,31 +548,14 @@ function App() {
           {selectedRepo && jobs.length > 0 && (
             <div className="job-list">
               {jobs.map((job) => (
-                <article className="job" key={job.id}>
-                  <div className="job-header">
-                    <div>
-                      <p className="mono small">{job.filePath}</p>
-                      <p className="muted small">{new Date(job.createdAt).toLocaleString()}</p>
-                    </div>
-                    <span className={`status ${job.status}`}>{job.status}</span>
-                  </div>
-                  {job.prUrl && (
-                    <p className="small">
-                      PR: <a href={job.prUrl} target="_blank" rel="noreferrer">{job.prUrl}</a>
-                    </p>
-                  )}
-                  {job.log?.length > 0 && (
-                    <details>
-                      <summary>Logs</summary>
-                      <ul>
-                        {job.log.slice(-3).map((line, idx) => (
-                          <li key={idx}>{line}</li>
-                        ))}
-                      </ul>
-                    </details>
-                  )}
-                </article>
+                <JobCard
+                  key={job.id}
+                  job={job}
+                  isOpen={openLogs[job.id] ?? false}
+                  onToggle={(open) => setOpenLogs((prev) => ({ ...prev, [job.id]: open }))}
+                />
               ))}
+
             </div>
           )}
         </section>
