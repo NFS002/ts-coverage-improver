@@ -13,7 +13,7 @@ async function bootstrap() {
   OpenAIConfig.initialize();
   const port = process.env.PORT || 3000;
   await app.listen(port);
-  console.log(`API running on http://localhost:${port}`);
+  console.info(`API running on http://localhost:${port}`);
 }
 
 bootstrap();

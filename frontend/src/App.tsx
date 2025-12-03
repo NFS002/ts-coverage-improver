@@ -429,7 +429,7 @@ function App() {
             <div>
               <h2>Coverage by file</h2>
               {selectedRepo &&
-                <p className="muted small">
+                <div className="muted small">
                   Repository: {selectedRepoLabel}
                   {selectedRepo.forkMode &&
                     <div className="repo-fork-info">
@@ -438,7 +438,7 @@ function App() {
                       </div>
                     </div>
                   }
-                </p>
+                </div>
               }
             </div>
             <div className="panel-header-actions">
@@ -571,7 +571,7 @@ function App() {
             <div>
               <h2>Jobs</h2>
               {selectedRepo &&
-                <p className="muted small">
+                <div className="muted small">
                   Repository: {selectedRepoLabel}
                   {selectedRepo.forkMode &&
                     <div className="repo-fork-info">
@@ -580,7 +580,7 @@ function App() {
                       </div>
                     </div>
                   }
-                </p>
+                </div>
               }
             </div>
             <div className="panel-header-actions">

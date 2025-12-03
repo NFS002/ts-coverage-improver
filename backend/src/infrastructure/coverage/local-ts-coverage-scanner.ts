@@ -15,23 +15,11 @@ export class LocalTsCoverageScanner implements CoverageScanner {
     const currentBranch = currentBranchResult.stdout.trim();
     console.info(`Current branch is ${currentBranch}`);
     const coverageFileSummaryPath = path.join(repositoryPath, COVERAGE_FILE_SUMMARY_NAME);
-    const stat = safeStatSync(coverageFileSummaryPath);
-    console.info('Stats: ', {
-      coverageFileSummaryPath,
-      stat,
-      isFile: stat?.isFile(),
-      isDirectory: stat?.isDirectory(),
-    });
 
     if (safeStatSync(coverageFileSummaryPath)?.isFile()) {
       console.info('Found coverage summary file at', coverageFileSummaryPath);
       const fileContentsStr = fs.readFileSync(coverageFileSummaryPath, 'utf-8');
-      console.info('Coverage summary file contents:', fileContentsStr);
-      const coverageJson = JSON.parse(fs.readFileSync(coverageFileSummaryPath, 'utf-8'));
-      // const files: CoverageFile[] = Object.entries<CoverageFile>(coverageJson)
-      //   .filter(([file, _]) => file.endsWith('.ts'))
-      //   .map(([file, stats]) => new CoverageFile(file, Number(stats.coveragePct ?? 0)));
-      console.info("Raw coverage summary JSON:", coverageJson);
+      const coverageJson = JSON.parse(fileContentsStr);
       const allFiles = Object.values<CoverageFile>(coverageJson)
       console.info("All files from coverage summary:", allFiles);
       const tsFiles = allFiles.filter(f => f.filePath.endsWith('.ts'));
@@ -41,15 +29,10 @@ export class LocalTsCoverageScanner implements CoverageScanner {
       } else {
         console.warn("No .ts files found in coverage summary, falling back to discovery");
       }
-      //   console.info("Returing files now from coverage summary:", files);
-      // if (files.length) return files;
     }
 
     // Discover *.ts files in the repository
-    let fileNames: string[] = []
-    console.info({
-      repositoryPath
-    })
+    let fileNames: string[] = [];
     const tsConfigPath = ts.findConfigFile(repositoryPath, ts.sys.fileExists, "tsconfig.json");
     if (tsConfigPath) {
       console.info('Found tsconfig.json at', tsConfigPath);
