@@ -5,13 +5,12 @@ import { JobDrizzleRepository } from './infrastructure/repositories/job.drizzle.
 import { FileSystemRepoPreparer } from './infrastructure/github/fs-repo.preparer';
 import { LocalTsCoverageScanner } from './infrastructure/coverage/local-ts-coverage-scanner';
 import { SimpleAiRunner } from './infrastructure/ai/simple-ai.runner';
-import { DryRunPullRequestService } from './infrastructure/github/dry-run.pr-service';
 import { ProcessJobUseCase } from './application/use-cases/process-job.usecase';
 import { StartImprovementUseCase } from './application/use-cases/start-improvement.usecase';
 import { ListJobsUseCase } from './application/use-cases/list-jobs.usecase';
 import { AnalyseCoverageUseCase } from './application/use-cases/analyse-coverage.usecase';
 import { GetJobUseCase } from './application/use-cases/get-job.usecase';
-import { InMemoryJobQueue } from './infrastructure/queue/in-memory.queue';
+import { DbJobQueue } from './infrastructure/queue/db-job-queue.queue';
 import { RepositoryDrizzleRepository } from './infrastructure/repositories/repository.drizzle.repository';
 import { EnsureRepositoryUseCase } from './application/use-cases/ensure-repository.usecase';
 import { ListRepositoriesUseCase } from './application/use-cases/list-repositories.usecase';
@@ -56,33 +55,27 @@ import { GetRepositoryUseCase } from './application/use-cases/get-repository.use
       useFactory: () => new SimpleAiRunner(),
     },
     {
-      provide: DryRunPullRequestService,
-      useFactory: () => new DryRunPullRequestService(),
-    },
-    {
       provide: ProcessJobUseCase,
       useFactory: (
         repo: JobDrizzleRepository,
         repositoryRepo: RepositoryDrizzleRepository,
-        preparer: FileSystemRepoPreparer,
         ai: SimpleAiRunner,
-        pr: DryRunPullRequestService,
-      ) => new ProcessJobUseCase(repo, repositoryRepo, preparer, ai, pr),
-      inject: [JobDrizzleRepository, RepositoryDrizzleRepository, FileSystemRepoPreparer, SimpleAiRunner, DryRunPullRequestService],
+      ) => new ProcessJobUseCase(repo, repositoryRepo, ai),
+      inject: [JobDrizzleRepository, RepositoryDrizzleRepository, SimpleAiRunner],
     },
     {
-      provide: InMemoryJobQueue,
+      provide: DbJobQueue,
       useFactory: (processor: ProcessJobUseCase, repo: JobDrizzleRepository) =>
-        new InMemoryJobQueue(processor, repo),
+        new DbJobQueue(processor, repo),
       inject: [ProcessJobUseCase, JobDrizzleRepository],
     },
     {
       provide: StartImprovementUseCase,
       useFactory: (
         repo: JobDrizzleRepository,
-        queue: InMemoryJobQueue,
+        queue: DbJobQueue,
       ) => new StartImprovementUseCase(repo, queue),
-      inject: [JobDrizzleRepository, InMemoryJobQueue],
+      inject: [JobDrizzleRepository, DbJobQueue],
     },
     {
       provide: ListJobsUseCase,

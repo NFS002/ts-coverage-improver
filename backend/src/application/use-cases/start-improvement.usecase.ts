@@ -12,9 +12,8 @@ export class StartImprovementUseCase {
   ) {}
 
   async execute(repo: Repository, filePath: string): Promise<ImprovementJob> {
-    const job = ImprovementJob.fromRepositoryDao(repo, filePath);
-    await this.jobQueue.enqueue(job.id);
-    await this.jobRepository.save(job);
+    const job = ImprovementJob.create(repo, filePath);
+    await this.jobQueue.enqueue(job);
     return job;
   }
 }

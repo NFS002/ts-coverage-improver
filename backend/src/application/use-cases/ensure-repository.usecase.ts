@@ -4,7 +4,6 @@ import { Repository } from '../../domain/entities/repository.entity';
 import type { OctokitResponse } from "@octokit/types";
 import type { components } from "@octokit/openapi-types";
 import { ForkModeConfig, GithubConfig } from 'infrastructure/config';
-import { Octokit } from '@octokit/rest';
 
 type ReposGetResponseData = components["schemas"]["full-repository"];
 type ReposGetResponse = OctokitResponse<ReposGetResponseData>;

@@ -1,0 +1,70 @@
+graph LR
+  subgraph HTTP
+    API["ApiController\nNestJS + Zod validation"]
+  end
+
+  subgraph Application
+    Analyse[AnalyseCoverageUseCase]
+    StartJob[StartImprovementUseCase]
+    ProcessJob[ProcessJobUseCase]
+    ListJobs[ListJobsUseCase]
+    GetJob[GetJobUseCase]
+    ListRepos[ListRepositoriesUseCase]
+    GetRepo[GetRepositoryUseCase]
+    EnsureRepo[EnsureRepositoryUseCase]
+  end
+
+  subgraph Domain
+    RepoEnt[Repository]
+    JobEnt[ImprovementJob]
+    CoverageFile[CoverageFile]
+    JobStatus[JobStatus]
+  end
+
+  subgraph Infrastructure
+    RepoPrep[FileSystemRepoPreparer]
+    CoverageScanner[LocalTsCoverageScanner]
+    JobRepo[JobDrizzleRepository\nSQLite + Drizzle]
+    RepoRepo[RepositoryDrizzleRepository\nSQLite + Drizzle]
+    Queue["DbJobQueue\n(timer dispatch)"]
+    AiRunner["SimpleAiRunner\n(execa codex/gh/git)"]
+    PrService[DryRunPullRequestService]
+    DB[(SQLite DB)]
+  end
+
+  API --> Analyse
+  API --> StartJob
+  API --> ListJobs
+  API --> GetJob
+  API --> ListRepos
+  API --> GetRepo
+
+  Analyse --> RepoPrep
+  Analyse --> CoverageScanner
+  Analyse --> EnsureRepo
+
+  StartJob --> Queue
+  StartJob --> JobRepo
+
+  Queue --> ProcessJob
+  ProcessJob --> JobRepo
+  ProcessJob --> RepoRepo
+  ProcessJob --> RepoPrep
+  ProcessJob --> AiRunner
+  ProcessJob --> PrService
+  ProcessJob --> JobRepo
+
+  ListJobs --> JobRepo
+  GetJob --> JobRepo
+  ListRepos --> RepoRepo
+  ListRepos --> JobRepo
+  GetRepo --> RepoRepo
+  EnsureRepo --> RepoRepo
+
+  JobRepo --> DB
+  RepoRepo --> DB
+
+  RepoPrep -. uses .-> RepoEnt
+  CoverageScanner -. scans .-> CoverageFile
+  JobRepo -. persists .-> JobEnt
+  RepoRepo -. persists .-> RepoEnt

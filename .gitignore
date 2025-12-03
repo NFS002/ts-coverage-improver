@@ -1,11 +1,31 @@
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Dependency directories
 node_modules
+
+# Build output directories
 dist
-.turbo
-.workspace
-coverage
+dist-ssr
+
+# Data
 data
-frontend/node_modules
-backend/node_modules
-backend/dist
-backend/.env
-*.sqlite
+.workspace
+!.workspace/AGENTS.override.md
+
+# Environment variables/local settings
+.env
+.evv.*
+!.env.example
+*.local
+
+# Debug log files
+npm-debug.log*

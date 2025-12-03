@@ -15,6 +15,10 @@ export const execToString = (cmd: string, cwd?: string) => execSync(cmd, { encod
 export const COVERAGE_FILE_SUMMARY_NAME = 'ts-coverage-improver.summary.json';
 
 
+// Relative to the repository root of cloned repositories (.ie in the .workspace directory)
+export const CUSTOM_AGENT_INSTRUCTIONS_FILE_PATH = '../../AGENTS.ts-coverage-improver.md';
+
+
 export const COVERAGE_FILE_FORMAT_EXAMPLE = {
     "path/to/file1.ts": {
       include: true,
@@ -27,3 +31,12 @@ export const COVERAGE_FILE_FORMAT_EXAMPLE = {
       coveragePct: 90.0
     }
 };
+
+export const mdTemplate = (template: string, variables: Record<string, string>) => {
+  let result = template;
+  for (const [key, value] of Object.entries(variables)) {
+    result = result.replace(new RegExp(`;;${key};;`, 'g'), value);
+  }
+  return result;
+}
+  

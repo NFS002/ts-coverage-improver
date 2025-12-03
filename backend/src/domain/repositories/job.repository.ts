@@ -16,6 +16,8 @@ export interface JobRepository {
   findById(id: string): Promise<ImprovementJob | null>;
   list(repoId?: string): Promise<ImprovementJob[]>;
   findQueued(): Promise<ImprovementJob[]>;
+  findRunning(): Promise<ImprovementJob[]>;
+  findIncomplete(): Promise<ImprovementJob[]>;
   statsByRepo(repoId?: string): Promise<RepoJobStats[]>;
   updateStatus(id: string, status: JobStatus, prUrl?: string | null): Promise<void>;
   appendLog(id: string, message: string): Promise<void>;

@@ -1,5 +1,5 @@
-import fs from 'fs';
-import path from 'path';
+import { execToString } from "./fs.utils";
+
 
 export const GITHUB_SSH_URL_REGEX = /^git@github\.com:\/?([^/]+)\/(.+?)(?:\.git)?$/
 
@@ -44,27 +44,11 @@ export function httpsToSshUrl(githubUrl: string): string {
 export const toSshUrl = (repo: string, owner: string): string => `git@github.com:${owner}/${repo}.git`;
 
 
-
-
 const toPathRegex = (path: string): RegExp => new RegExp(`${String.raw`(?:\/|^)${path}(?:\/|$)`}$`);
 
 const INCLUDED_PATHS = [
     /^.*\.ts$/
 ];
-
-// export const EXCLUDED_PATHS = [
-//     /node_modules(?:\/|$)/,
-//     /vendor(?:\/|$)/,
-//     /dist(?:\/|$)/,
-//     /build(?:\/|$)/,
-//     /coverage(?:\/|$)/,
-//     /bower_components(?:\/|$)/,
-//     /jspm_packages(?:\/|$)/,
-//     /^\./,
-//     /\.d\.ts$/,
-//     /\.spec\.ts$/,
-//     /\.test\.ts$/
-// ];
 
 const EXCLUDED_PATHS = [
     toPathRegex("node_modules"),

@@ -1,11 +1,11 @@
-import { desc, eq, sql } from 'drizzle-orm';
+import { desc, eq, or, sql } from 'drizzle-orm';
 import { JobRepository, RepoJobStats } from '../../domain/repositories/job.repository';
 import { ImprovementJob } from '../../domain/entities/improvement-job.entity';
 import { JobStatus } from '../../domain/value-objects/job-status';
 import { DbClient } from '../config/database';
 import { jobsTable, SelectJobRow } from '../persistence/entities/jobs';
 
-const toDomain = (row: SelectJobRow): ImprovementJob => ImprovementJob.fromRow(row);
+const toDto = (row: SelectJobRow): ImprovementJob => ImprovementJob.fromRow(row);
 
 const toRow = (job: ImprovementJob): SelectJobRow => ({
   id: job.id,
@@ -32,7 +32,7 @@ export class JobDrizzleRepository implements JobRepository {
 
   async findById(id: string): Promise<ImprovementJob | null> {
     const row = this.db.select().from(jobsTable).where(eq(jobsTable.id, id)).get();
-    return row ? toDomain(row) : null;
+    return row ? toDto(row) : null;
   }
 
   async list(repoId?: string): Promise<ImprovementJob[]> {
@@ -40,12 +40,31 @@ export class JobDrizzleRepository implements JobRepository {
     const rows = (repoId ? baseQuery.where(eq(jobsTable.repoId, repoId)) : baseQuery)
       .orderBy(desc(jobsTable.createdAt))
       .all();
-    return rows.map(toDomain);
+    return rows.map(toDto);
   }
 
   async findQueued(): Promise<ImprovementJob[]> {
     const rows = this.db.select().from(jobsTable).where(eq(jobsTable.status, 'queued')).all();
-    return rows.map(toDomain);
+    return rows.map(toDto);
+  }
+
+  async findRunning(): Promise<ImprovementJob[]> {
+    const rows = this.db.select().from(jobsTable).where(eq(jobsTable.status, 'running')).all();
+    return rows.map(toDto);
+  }
+
+  async findIncomplete(): Promise<ImprovementJob[]> {
+    const rows = this.db
+      .select()
+      .from(jobsTable)
+      .where(
+        or(
+          eq(jobsTable.status, 'queued'),
+          eq(jobsTable.status, 'running'),
+        )
+      )
+      .all();
+    return rows.map(toDto);
   }
 
   async statsByRepo(repoId?: string): Promise<RepoJobStats[]> {

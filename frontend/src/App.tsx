@@ -42,11 +42,9 @@ const toRepoLabel = (repo: Repository | null) => {
   return repo?.id ?? 'Unknown repository';
 };
 
-const toRepoHttpsUrl = (repo: Pick<Repository, 'owner' | 'repo'> | null | undefined) => {
-  if (repo?.owner && repo?.repo) {
-    return `https://github.com/${repo.owner}/${repo.repo}.git`;
-  }
-  return null;
+const toRepoHttpsUrl = (repo: Repository) => {
+  const owner = repo.forkMode ? (repo.forkOrg ?? repo.forkOwner) : repo.owner;
+  return `https://github.com/${owner}/${repo.repo}.git`;
 };
 
 function App() {
@@ -182,7 +180,7 @@ function App() {
         throw new Error(message);
       }
       const json = await res.json();
-      const repo: Partial<Repository> & { id: string } = json.repository;
+      const repo: Repository = json.repository;
       const files: CoverageFile[] = json.files?.filter((file: CoverageFile) => file.include) ?? [];
       upsertRepository(repo);
       setSelectedRepoId(repo.id);
@@ -253,6 +251,11 @@ function App() {
     if (!coverageByRepo[repoId]) {
       await loadCoverage({ repoId });
     }
+    await loadJobsForRepo(repoId);
+  }, [coverageByRepo, loadCoverage, loadJobsForRepo]);
+
+  const refreshRepoData = useCallback(async (repoId: string) => {
+    await loadCoverage({ repoId });
     await loadJobsForRepo(repoId);
   }, [coverageByRepo, loadCoverage, loadJobsForRepo]);
 
@@ -425,9 +428,33 @@ function App() {
           <div className="panel-header">
             <div>
               <h2>Coverage by file</h2>
-              {selectedRepo && <p className="muted small">Repository: {selectedRepoLabel}</p>}
+              {selectedRepo &&
+                <p className="muted small">
+                  Repository: {selectedRepoLabel}
+                  {selectedRepo.forkMode &&
+                    <div className="repo-fork-info">
+                      <div>
+                        <i className="mono smaller">Forked for: {selectedRepo.forkOrg ?? selectedRepo.forkOwner}</i>
+                      </div>
+                    </div>
+                  }
+                </p>
+              }
             </div>
-            <span className="badge">Below 50%: {lowCoverage.length}</span>
+            <div className="panel-header-actions">
+              <span className="badge">Below 50%: {lowCoverage.length}</span>
+              {selectedRepo && (
+                <button
+                  className="refresh-btn small-btn"
+                  type="button"
+                  aria-label="Refresh repository coverage"
+                  title="Refresh repository coverage"
+                  onClick={() => refreshRepoData(selectedRepo.id)}
+                >
+                  Refresh
+                </button>
+              )}
+            </div>
           </div>
           {!selectedRepo && (
             <p className="muted">Select a repository from the Repositories tab or analyse a URL to load coverage.</p>
@@ -505,8 +532,18 @@ function App() {
                   <div>
                     <p className="mono small">{toRepoLabel(repo)}</p>
                   </div>
+                  <button
+                    className="refresh-btn small-btn"
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      refreshRepoData(repo.id);
+                    }}
+                  >
+                    Refresh
+                  </button>
                 </div>
-                {repo.forkMode &&                 
+                {repo.forkMode &&
                   <div className="repo-fork-info">
                     <div>
                       <i className="mono smaller">Forked for: {repo.forkOrg ?? repo.forkOwner}</i>
@@ -533,9 +570,33 @@ function App() {
           <div className="panel-header">
             <div>
               <h2>Jobs</h2>
-              {selectedRepo && <p className="muted small">Repository: {selectedRepoLabel}</p>}
+              {selectedRepo &&
+                <p className="muted small">
+                  Repository: {selectedRepoLabel}
+                  {selectedRepo.forkMode &&
+                    <div className="repo-fork-info">
+                      <div>
+                        <i className="mono smaller">Forked for: {selectedRepo.forkOrg ?? selectedRepo.forkOwner}</i>
+                      </div>
+                    </div>
+                  }
+                </p>
+              }
             </div>
-            <span className="badge subtle">{jobs.length} total</span>
+            <div className="panel-header-actions">
+              <span className="badge subtle">{jobs.length} total</span>
+              {selectedRepo && (
+                <button
+                  className="refresh-btn small-btn"
+                  type="button"
+                  aria-label="Refresh repository jobs"
+                  title="Refresh repository jobs"
+                  onClick={() => refreshRepoData(selectedRepo.id)}
+                >
+                  Refresh
+                </button>
+              )}
+            </div>
           </div>
           {!selectedRepo && <p className="muted">Select a repository to view jobs.</p>}
           {selectedRepo && loadingJobs && <p className="muted">Loading jobs…</p>}

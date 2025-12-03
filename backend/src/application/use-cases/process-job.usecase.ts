@@ -1,16 +1,12 @@
 import { JobRepository } from '../../domain/repositories/job.repository';
-import { RepoPreparer } from '../ports/repo-preparer';
 import { AiRunner, AiRunnerResult } from '../ports/ai-runner';
-import { PullRequestService } from '../ports/pr-service';
 import { RepositoryRepository } from '../../domain/repositories/repository.repository';
 
 export class ProcessJobUseCase {
   constructor(
     private readonly jobRepository: JobRepository,
     private readonly repositoryRepository: RepositoryRepository,
-    private readonly repoPreparer: RepoPreparer,
     private readonly aiRunner: AiRunner,
-    private readonly prService: PullRequestService,
   ) { }
 
   async execute(jobId: string): Promise<void> {
@@ -39,11 +35,9 @@ export class ProcessJobUseCase {
         const { success, output: prUrl } = res;
         console.info(`AI run completed for job ${job.id}`);
         job.markCompleted(prUrl, `Job completed: success=${success}`);
-        this.jobRepository.save(job);
       }).catch((err) => {
         console.error(`AI run failed for job ${job.id}:`, err);
-        job.markFailed(`AI run error`);
-        this.jobRepository.save(job);
+        job.markFailed('Job failed during AI execution');
       }).finally(async () => {
         this.jobRepository.save(job);
       });

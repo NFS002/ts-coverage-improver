@@ -1,3 +1,5 @@
+import { ImprovementJob } from "domain/entities/improvement-job.entity";
+
 export interface JobQueue {
-  enqueue(jobId: string): Promise<void>;
+  enqueue(job: ImprovementJob): Promise<void>;
 }

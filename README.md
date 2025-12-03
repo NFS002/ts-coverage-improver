@@ -146,30 +146,6 @@ You have a GitHub token with repo scope
 
 ## ts-coverage-improver
 
-- Always run a build and lint before committing any changes (See the package.json for the exact commands to run)
-- When asked to create a file named ts-coverage-improver.summary.json, this file should have the structure
-
-```json
-
-{
-    "path/to/file1.ts": {
-      "include": true,
-      "filePath": "path/to/file1.ts",
-      "coveragePct": 85.5
-    },
-    "path/to/file2.ts": {
-     "include": true,
-     "filePath": "path/to/file2.ts",
-     "coveragePct": 90.0
-    }
-};
-
-```
-- Any *.ts file recorded in the above json object should always have `included` set to `true`. Any other file type than a typescript (*.ts) file should have `included` set to `false`.
-- If you run into any unexpected errors when trying to run any command, please exit immediately.
-- End every task with a random stoic philisophy quote
-
-
 - codex permssions
 - OpenAIConfig.initialize() not working
 - Global error handling, avoid leaking errors
@@ -182,3 +158,13 @@ such as ENOENT: no such file or directory, stat '/Users/noahfs/dev/ts-coverage-i
 - You shouldnt need to care about the fork at all.
 - Fork config is wrong, should just need to store 'forkedFrom' in DB in case of sync
 - MAKE 'ANALYZE' async
+- sort files by tree, coveragePct, search files etc
+- search jobs, sort jobs
+- search sort repos
+
+// Relative to the repository root of cloned repositories (.ie in the .workspace directory)
+export const CUSTOM_AGENT_INSTRUCTIONS_FILE_PATH = '../../AGENTS.ts-coverage-improver.md';
+
+KNOWN ISSUES
+- Sometimes branch doesnt get reset back to default branch if the program exits during an AI run
+- Must be reset manually

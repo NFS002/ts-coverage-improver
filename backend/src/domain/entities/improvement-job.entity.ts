@@ -37,7 +37,7 @@ export class ImprovementJob {
     this.updatedAt = updatedAt;
   }
 
-  static fromRepositoryDao(repositoryDao: Repository, filePath: string): ImprovementJob {
+  static create(repositoryDao: Repository, filePath: string): ImprovementJob {
     const { id: repoId, owner, repo, updatedAt, createdAt } = repositoryDao;
     return new ImprovementJob({
       id: uuid(),

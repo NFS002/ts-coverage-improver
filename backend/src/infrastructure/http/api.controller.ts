@@ -83,20 +83,8 @@ export class ApiController {
   }
 
   @Get('/jobs')
-  async jobs(@Query('repoId') repoId?: string) {
-    const jobs = await this.listJobs.execute(repoId);
-    // const repositoryMap = repoId
-    //   ? new Map<string, RepositorySummaryDto | undefined>([
-    //     [repoId, (await this.getRepository.execute(repoId)) ?? undefined],
-    //   ])
-    //   : new Map<string, RepositorySummaryDto | undefined>(
-    //     (await this.listRepositories.execute()).map((r) => [r.id, r]),
-    //   );
-
-    // return jobs.map((job) => {
-    //   const repo = repositoryMap.get(job.repoId);
-    //   return mapJob(job);
-    // });
+  async jobs() {
+    const jobs = await this.listJobs.execute();
     return jobs.map(mapJob);
   }
 
@@ -106,7 +94,6 @@ export class ApiController {
     if (!job) {
       throw new BadRequestException('Job not found');
     }
-    //const repo = await this.getRepository.execute(job.repoId);
     return mapJob(job);
   }
 
